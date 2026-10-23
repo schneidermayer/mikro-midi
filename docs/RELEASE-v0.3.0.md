@@ -10,6 +10,8 @@ Use your Maschine Mikro MK3 as a MIDI controller without the official software s
 - Dedicated Knob page with three relative formats, absolute mode, step size, direction, and range settings.
 - Individual or selected-group pad colors, built-in color themes, and brightness control.
 - JSON preset import/export and automatic settings persistence.
+- Fast page switching with retained controls and focused live updates.
+- Reset all MIDI assignments in one click, preserving colors, with Undo.
 - Automatic reconnection and Panic with sustain release and pitch-bend reset.
 - Self-contained, Developer ID signed and Apple-notarized app: unzip, move to Applications, and open.
 

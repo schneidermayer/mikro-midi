@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct KnobWorkspace: View {
-    @EnvironmentObject var model: MikroModel
+    @Bindable var model: MikroModel
     @Environment(\.accessibilityReduceMotion) var reduceMotion
 
     private var absolute: Bool { model.settings.encoder_mode == "absolute" }
@@ -134,7 +134,7 @@ struct KnobWorkspace: View {
 }
 
 struct TouchStripWorkspace: View {
-    @EnvironmentObject var model: MikroModel
+    @Bindable var model: MikroModel
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     private var pitchBend: Bool { model.settings.touch_strip_mode == "pitch_bend" }
 

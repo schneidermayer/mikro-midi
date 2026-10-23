@@ -28,7 +28,7 @@ Official release downloads are signed with a Developer ID and notarized by Apple
 - **Colors:** choose Aurora, Ember, Mint, Ocean, Sunset, Neon, Ice, or Mono, then customize individual pads or a selection. Adjust idle and on-press brightness in Setup.
 - **Knob:** choose the MIDI CC, relative format or absolute output, step size, direction, and absolute range on its own page.
 - **Controls:** assign MIDI CCs to the buttons and touch strip, or use the strip for pitch bend.
-- **Presets:** import and export your setup as a JSON file. Settings save automatically between launches.
+- **Presets:** import and export your setup as a JSON file. Settings save automatically between launches. Use **Setup → Reset MIDI assignments** to restore mappings while keeping your colors, with Undo if you change your mind.
 - **Live feedback:** pads glow when you play them, and the app shows knob movement, incoming events, and connection status. Unplug and reconnect your controller without restarting.
 
 The **Pads**, **Buttons**, **Knob**, **Touch strip**, and **Setup** pages keep the everyday settings together. Changes apply to the controller while the app is running.

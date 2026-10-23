@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import SwiftUI
+import Observation
 
 struct MikroSettings: Codable, Equatable {
     var notemaps = [48, 49, 50, 51, 44, 45, 46, 47, 40, 41, 42, 43, 36, 37, 38, 39]
@@ -126,8 +127,8 @@ struct ActivityItem: Identifiable {
     let time = Date()
 }
 
-@MainActor final class MikroModel: ObservableObject {
-    @Published var settings = MikroSettings() {
+@Observable @MainActor final class MikroModel {
+    var settings = MikroSettings() {
         didSet {
             if settings.encoder_mode != oldValue.encoder_mode || settings.encoder_cc != oldValue.encoder_cc || settings.encoder_min != oldValue.encoder_min || settings.encoder_max != oldValue.encoder_max || settings.encoder_initial != oldValue.encoder_initial {
                 encoderValue = settings.encoder_initial
@@ -136,42 +137,44 @@ struct ActivityItem: Identifiable {
             scheduleSave()
         }
     }
-    @Published var workspace = Workspace.pads
-    @Published var selectedPad = 12
-    @Published var selectedPads: Set<Int> = [12]
-    @Published var paletteUsesSelection = false
-    @Published var glowEnabled = UserDefaults.standard.object(forKey: "padGlow") as? Bool ?? true {
+    var workspace = Workspace.pads
+    var selectedPad = 12
+    var selectedPads: Set<Int> = [12]
+    var paletteUsesSelection = false
+    var glowEnabled = UserDefaults.standard.object(forKey: "padGlow") as? Bool ?? true {
         didSet { if !preview { UserDefaults.standard.set(glowEnabled, forKey: "padGlow") } }
     }
-    @Published var selectedButton = 22
-    @Published var state = "stopped"
-    @Published var statusMessage = "Ready when you are"
-    @Published var activePads = Set<Int>()
-    @Published var glowingPads = Set<Int>()
-    @Published var activeButtons = Set<Int>()
-    @Published var velocities: [Int: Int] = [:]
-    @Published var activity: [ActivityItem] = []
-    @Published var encoderValue = 64
-    @Published var encoderHasActivity = false
-    @Published var encoderRotation = 0.0
-    @Published var encoderLastDelta = 0
-    @Published var stripValue = 0
-    @Published var stripTouched = false
-    @Published var errorMessage: String?
-    @Published var presetName = "Custom palette"
-    @Published var autoStart: Bool { didSet { UserDefaults.standard.set(autoStart, forKey: "autoStart") } }
-    @Published var hasProcess = false
+    var selectedButton = 22
+    var state = "stopped"
+    var statusMessage = "Ready when you are"
+    var activePads = Set<Int>()
+    var glowingPads = Set<Int>()
+    var activeButtons = Set<Int>()
+    var velocities: [Int: Int] = [:]
+    var activity: [ActivityItem] = []
+    var encoderValue = 64
+    var encoderHasActivity = false
+    var encoderRotation = 0.0
+    var encoderLastDelta = 0
+    var stripValue = 0
+    var stripTouched = false
+    var errorMessage: String?
+    var presetName = "Custom palette"
+    var canUndoAssignmentReset = false
+    var autoStart: Bool { didSet { UserDefaults.standard.set(autoStart, forKey: "autoStart") } }
+    var hasProcess = false
     let preview: Bool
     let configURL: URL
-    private var process: Process?
-    private var inputPipe: Pipe?
-    private var outputPipe: Pipe?
-    private var errorPipe: Pipe?
-    private var outputBuffer = ""
-    private var saveWork: DispatchWorkItem?
-    private var loading = true
-    private var selectionAnchor = 12
-    private var glowTokens: [Int: UUID] = [:]
+    @ObservationIgnored private var process: Process?
+    @ObservationIgnored private var inputPipe: Pipe?
+    @ObservationIgnored private var outputPipe: Pipe?
+    @ObservationIgnored private var errorPipe: Pipe?
+    @ObservationIgnored private var outputBuffer = ""
+    @ObservationIgnored private var saveWork: DispatchWorkItem?
+    @ObservationIgnored private var loading = true
+    @ObservationIgnored private var selectionAnchor = 12
+    @ObservationIgnored private var glowTokens: [Int: UUID] = [:]
+    @ObservationIgnored private var assignmentResetSnapshot: MikroSettings?
 
     static let buttonNames = ["Project", "Star", "Browse", "Volume", "Swing", "Tempo", "Plug-in", "Sampling", "Left", "Right", "Pitch", "Mod", "Perform", "Notes", "Group", "Auto", "Lock", "Note Repeat", "Restart", "Erase", "Tap", "Follow", "Play", "Record", "Stop", "Shift", "Fixed Velocity", "Pad Mode", "Keyboard", "Chords", "Step", "Scene", "Pattern", "Events", "Variation", "Duplicate", "Select", "Solo", "Mute", "Encoder Press", "Encoder Touch"]
 
@@ -471,7 +474,53 @@ struct ActivityItem: Identifiable {
         }
     }
 
-    func reset() { settings = MikroSettings(); presetName = "Aurora"; log("Default mappings restored") }
+    func resetAssignments() {
+        // Keep the earliest snapshot if Reset is clicked twice before Undo.
+        if assignmentResetSnapshot == nil { assignmentResetSnapshot = settings }
+        if hasProcess { panic() }
+        applyAssignments(from: MikroSettings())
+        canUndoAssignmentReset = true
+        log("MIDI assignments reset; pad colors and brightness preserved")
+    }
+
+    func undoAssignmentReset() {
+        guard let snapshot = assignmentResetSnapshot else { return }
+        if hasProcess { panic() }
+        applyAssignments(from: snapshot)
+        dismissAssignmentUndo()
+        log("Previous MIDI assignments restored")
+    }
+
+    func dismissAssignmentUndo() {
+        assignmentResetSnapshot = nil
+        canUndoAssignmentReset = false
+    }
+
+    private func applyAssignments(from source: MikroSettings) {
+        var next = settings
+        next.notemaps = source.notemaps
+        next.midi_channel = source.midi_channel
+        next.button_ccs = source.button_ccs
+        next.encoder_cc = source.encoder_cc
+        next.encoder_mode = source.encoder_mode
+        next.encoder_step = source.encoder_step
+        next.encoder_invert = source.encoder_invert
+        next.encoder_relative_format = source.encoder_relative_format
+        next.encoder_min = source.encoder_min
+        next.encoder_max = source.encoder_max
+        next.encoder_initial = source.encoder_initial
+        next.touch_strip_cc = source.touch_strip_cc
+        next.touch_strip_mode = source.touch_strip_mode
+        next.poly_aftertouch = source.poly_aftertouch
+        settings = next
+    }
+
+    func reset() {
+        dismissAssignmentUndo()
+        settings = MikroSettings()
+        presetName = "Aurora"
+        log("Default mappings restored")
+    }
 
     func exportPreset() {
         let panel = NSSavePanel()
@@ -493,6 +542,7 @@ struct ActivityItem: Identifiable {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             settings = try JSONDecoder().decode(MikroSettings.self, from: Data(contentsOf: url)).validated()
+            dismissAssignmentUndo()
             presetName = url.deletingPathExtension().lastPathComponent
             log("Loaded preset: \(presetName)")
         } catch { errorMessage = "Could not import preset: \(error.localizedDescription)" }
