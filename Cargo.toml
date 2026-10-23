@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 authors = ["Viktor Rudnev <me@vrudnev.xyz>", "Hannes Schneidermayer"]
 
@@ -13,7 +13,6 @@ hidapi = { version = "2.6.3" }
 num = { version = "0.4.3" }
 num-derive = { version = "0.4.2" }
 num-traits = { version = "0.2.19" }
-midly = { version = "0.5.3" }
 clap = { version = "4.5.47", features = ["derive"] }
 config = { version = "0.15.16" }
 serde = { version = "1.0.225", features = ["derive"] }

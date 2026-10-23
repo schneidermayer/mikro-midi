@@ -9,48 +9,37 @@ pub(crate) fn self_test(
     screen: &mut Screen,
     lights: &mut Lights,
 ) -> HidResult<()> {
-    Font::write_digit(screen, 0, 0, 1, 4);
-    screen.write(device)?;
-    thread::sleep(time::Duration::from_millis(100));
-    Font::write_digit(screen, 0, 32, 3, 4);
-    screen.write(device)?;
-    thread::sleep(time::Duration::from_millis(100));
-    Font::write_digit(screen, 0, 64, 3, 4);
-    screen.write(device)?;
-    thread::sleep(time::Duration::from_millis(100));
-    Font::write_digit(screen, 0, 96, 7, 4);
-    screen.write(device)?;
+    for (position, digit) in [1, 3, 3, 7].into_iter().enumerate() {
+        Font::write_digit(screen, 0, position * 32, digit, 4);
+        screen.write(device)?;
+        if position < 3 {
+            thread::sleep(time::Duration::from_millis(100));
+        }
+    }
 
+    let brightnesses = [Brightness::Bright, Brightness::Normal, Brightness::Dim];
     for i in 0..39 {
-        lights.set_button(num::FromPrimitive::from_u32(i).unwrap(), Brightness::Bright);
-        lights.write(device)?;
-        lights.set_button(num::FromPrimitive::from_u32(i).unwrap(), Brightness::Normal);
-        lights.write(device)?;
-        lights.set_button(num::FromPrimitive::from_u32(i).unwrap(), Brightness::Dim);
-        lights.write(device)?;
-        // thread::sleep(time::Duration::from_millis(100));
+        let button = num::FromPrimitive::from_u32(i).unwrap();
+        for brightness in brightnesses {
+            lights.set_button(button, brightness);
+            lights.write(device)?;
+        }
     }
     for i in 0..16 {
-        // let color: PadColors = PadColors::Blue;
-        let color: PadColors = num::FromPrimitive::from_usize(i + 2).unwrap();
-        lights.set_pad(i, color, Brightness::Bright);
-        lights.write(device)?;
-        let color: PadColors = num::FromPrimitive::from_usize(i + 1).unwrap();
-        lights.set_pad(i, color, Brightness::Normal);
-        lights.write(device)?;
-        let color: PadColors = num::FromPrimitive::from_usize(i + 1).unwrap();
-        lights.set_pad(i, color, Brightness::Dim);
-        lights.write(device)?;
-        // thread::sleep(time::Duration::from_millis(1000));
+        for brightness in brightnesses {
+            let color: PadColors = num::FromPrimitive::from_usize(
+                i + 1 + usize::from(brightness == Brightness::Bright),
+            )
+            .unwrap();
+            lights.set_pad(i, color, brightness);
+            lights.write(device)?;
+        }
     }
     for i in 0..25 {
-        lights.set_slider(i, Brightness::Bright);
-        lights.write(device)?;
-        lights.set_slider(i, Brightness::Normal);
-        lights.write(device)?;
-        lights.set_slider(i, Brightness::Dim);
-        lights.write(device)?;
-        // thread::sleep(time::Duration::from_millis(1000));
+        for brightness in brightnesses {
+            lights.set_slider(i, brightness);
+            lights.write(device)?;
+        }
     }
     lights.reset();
     lights.write(device)?;

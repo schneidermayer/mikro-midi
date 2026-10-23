@@ -22,7 +22,7 @@ struct MikroPadsPage: View {
                     }
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "cursorarrow.click").font(.system(size: 12))
-                        Text("⌘ click to select more · ⇧ click for a range · Play to see the glow.").font(.system(size: 10))
+                        Text("⌘ click to add pads · ⇧ click for a range").font(.system(size: 10))
                     }.foregroundStyle(Studio.muted)
                     themePicker
                 }.padding(24)
@@ -108,7 +108,7 @@ struct MikroPadsPage: View {
                     .frame(width: 49, height: 49)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(model.selectionTitle).font(.system(size: 19, weight: .semibold))
-                    Text(model.selectedPads.count > 1 ? "Edit your selection together" : "Note on / note off").font(.system(size: 10)).foregroundStyle(Studio.muted)
+                    Text(model.selectedPads.count > 1 ? "Group editing" : "Note on / note off").font(.system(size: 10)).foregroundStyle(Studio.muted)
                 }
             }
             separator
@@ -118,7 +118,7 @@ struct MikroPadsPage: View {
                 HStack {
                     Text(MikroModel.noteName(model.settings.notemaps[model.selectedPad])).font(.system(size: 25, weight: .medium)).tracking(-0.8)
                     Spacer()
-                    numberField(value: Binding(get: { model.settings.notemaps[model.selectedPad] }, set: { model.settings.notemaps[model.selectedPad] = $0 }), range: 0...127)
+                    MIDIIntegerField(value: Binding(get: { model.settings.notemaps[model.selectedPad] }, set: { model.settings.notemaps[model.selectedPad] = $0 }), range: 0...127, label: "Pad \(model.selectedPhysicalPad) MIDI note")
                 }.padding(12).background(Studio.inset, in: RoundedRectangle(cornerRadius: 9))
                 Text("MIDI number 0–127 · C3 = 60").font(.system(size: 10)).foregroundStyle(Studio.muted)
               }
@@ -133,7 +133,7 @@ struct MikroPadsPage: View {
                             }.buttonStyle(.plain).disabled(!model.canTranspose(amount))
                         }
                     }
-                    Text("Shift notes by semitones. Keeps their spacing.").font(.system(size: 10)).foregroundStyle(Studio.muted).fixedSize(horizontal: false, vertical: true)
+                    Text("Transpose in semitones.").font(.system(size: 10)).foregroundStyle(Studio.muted).fixedSize(horizontal: false, vertical: true)
                 }
             }
             VStack(alignment: .leading, spacing: 11) {
@@ -162,7 +162,7 @@ struct MikroPadsPage: View {
             Spacer(minLength: 0)
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "checkmark.circle").foregroundStyle(Studio.accent)
-                Text("Changes save automatically.\nYour setup, ready next time.").font(.system(size: 10)).lineSpacing(4).foregroundStyle(Studio.muted)
+                Text("Saved automatically.").font(.system(size: 10)).lineSpacing(4).foregroundStyle(Studio.muted)
             }
         }.padding(24)
     }
@@ -170,13 +170,4 @@ struct MikroPadsPage: View {
     private func label(_ text: String) -> some View { Text(text).font(.system(size: 9, weight: .semibold)).tracking(1.5).foregroundStyle(Studio.muted) }
 
     private var separator: some View { Rectangle().fill(Studio.line).frame(height: 1) }
-
-    private func numberField(value: Binding<Int>, range: ClosedRange<Int>) -> some View {
-        HStack(spacing: 6) {
-            TextField("", value: Binding(get: { value.wrappedValue }, set: { value.wrappedValue = min(range.upperBound, max(range.lowerBound, $0)) }), format: .number.grouping(.never))
-                .textFieldStyle(.plain).font(.system(size: 13, weight: .medium, design: .monospaced)).multilineTextAlignment(.trailing).frame(width: 32)
-                .accessibilityLabel("MIDI value")
-            Stepper("", value: value, in: range).labelsHidden().controlSize(.mini).fixedSize()
-        }.padding(.vertical, 4).padding(.leading, 7).padding(.trailing, 3).background(Studio.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 5))
-    }
 }

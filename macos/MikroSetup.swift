@@ -17,7 +17,7 @@ struct MikroButtonsPage: View {
                             HStack {
                                 Text("CC").font(.system(size: 10, weight: .medium, design: .monospaced)).foregroundStyle(Studio.muted)
                                 Spacer()
-                                numberField(value: Binding(get: { model.settings.button_ccs[index] }, set: { model.settings.button_ccs[index] = $0 }), range: 0...127)
+                                MIDIIntegerField(value: Binding(get: { model.settings.button_ccs[index] }, set: { model.settings.button_ccs[index] = $0 }), range: 0...127, label: "\(MikroModel.buttonNames[index]) MIDI CC")
                             }
                         }.padding(12).background(model.activeButtons.contains(index) ? Studio.accent.opacity(0.10) : Studio.surface, in: RoundedRectangle(cornerRadius: 9))
                             .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(model.activeButtons.contains(index) ? Studio.accent.opacity(0.5) : Studio.line))
@@ -28,15 +28,6 @@ struct MikroButtonsPage: View {
     }
 
     private func label(_ text: String) -> some View { Text(text).font(.system(size: 9, weight: .semibold)).tracking(1.5).foregroundStyle(Studio.muted) }
-
-    private func numberField(value: Binding<Int>, range: ClosedRange<Int>) -> some View {
-        HStack(spacing: 6) {
-            TextField("", value: Binding(get: { value.wrappedValue }, set: { value.wrappedValue = min(range.upperBound, max(range.lowerBound, $0)) }), format: .number.grouping(.never))
-                .textFieldStyle(.plain).font(.system(size: 13, weight: .medium, design: .monospaced)).multilineTextAlignment(.trailing).frame(width: 32)
-                .accessibilityLabel("MIDI value")
-            Stepper("", value: value, in: range).labelsHidden().controlSize(.mini).fixedSize()
-        }.padding(.vertical, 4).padding(.leading, 7).padding(.trailing, 3).background(Studio.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 5))
-    }
 }
 
 struct MikroSetupPage: View {
@@ -48,8 +39,8 @@ struct MikroSetupPage: View {
                 HStack(spacing: 18) {
                     Image(systemName: "arrow.counterclockwise").font(.system(size: 19)).foregroundStyle(Studio.accent)
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("A fresh set of assignments").font(.system(size: 13, weight: .semibold))
-                        Text("Reset notes, buttons, knob, strip and MIDI channel. Keep your colors and brightness.")
+                        Text("Reset MIDI assignments").font(.system(size: 13, weight: .semibold))
+                        Text("Restore default mappings. Keep colors and brightness.")
                             .font(.system(size: 11)).foregroundStyle(Studio.muted).fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
@@ -59,7 +50,7 @@ struct MikroSetupPage: View {
                 HStack(alignment: .top, spacing: 20) {
                     VStack(alignment: .leading, spacing: 22) {
                         label("MIDI & HARDWARE")
-                        HStack { Text("MIDI channel"); Spacer(); numberField(value: $model.settings.midi_channel, range: 1...16) }
+                        HStack { Text("MIDI channel"); Spacer(); MIDIIntegerField(value: $model.settings.midi_channel, range: 1...16, label: "MIDI channel") }
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Pad brightness · idle")
                             Picker("Brightness", selection: $model.settings.pad_idle_brightness) { Text("Off").tag(0); Text("Low").tag(1); Text("Medium").tag(2); Text("High").tag(3) }.pickerStyle(.segmented).labelsHidden()
@@ -76,19 +67,19 @@ struct MikroSetupPage: View {
                                 .font(.system(size: 11, weight: .medium)).frame(maxWidth: .infinity).padding(.vertical, 9)
                                 .background(Studio.line, in: RoundedRectangle(cornerRadius: 7))
                         }.buttonStyle(.plain).disabled(!model.hasProcess)
-                        Text("Settings and mappings save automatically on this Mac.").font(.system(size: 11)).foregroundStyle(Studio.muted)
+                        Text("Settings save automatically.").font(.system(size: 11)).foregroundStyle(Studio.muted)
                     }.padding(22).frame(maxWidth: .infinity).background(Studio.surface, in: RoundedRectangle(cornerRadius: 12))
                     VStack(alignment: .leading, spacing: 18) {
-                        label("THREE STEPS TO SOUND")
-                        helpStep("1", "Connect your Mikro", "Plug Maschine Mikro MK3 into USB. Close Maschine and Controller Editor.")
-                        helpStep("2", "Choose the MIDI input", "In your DAW, enable “\(model.settings.port_name)” as a MIDI input.")
-                        helpStep("3", "Load an instrument", "Choose a drum kit or synth and play. Mikro MIDI sends MIDI; it does not generate sound.")
+                        label("GET STARTED")
+                        helpStep("1", "Connect USB", "Close other controller software.")
+                        helpStep("2", "Enable MIDI input", "Select “\(model.settings.port_name)” in your music app.")
+                        helpStep("3", "Load an instrument", "Load a drum kit or synth. Mikro MIDI sends MIDI, not audio.")
                     }.padding(22).frame(maxWidth: .infinity).background(Studio.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
                 }
                 VStack(alignment: .leading, spacing: 14) {
                     HStack { label("LIVE ACTIVITY"); Spacer(); Button("Clear") { model.activity = [] }.buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Studio.muted) }
                     if model.activity.isEmpty {
-                        Text("Play a pad or move a control to see MIDI activity here.").font(.system(size: 12)).foregroundStyle(Studio.muted).padding(.vertical, 18)
+                        Text("No MIDI activity yet.").font(.system(size: 12)).foregroundStyle(Studio.muted).padding(.vertical, 18)
                     } else {
                         ForEach(model.activity.prefix(12)) { item in
                             HStack(spacing: 16) {
@@ -101,7 +92,7 @@ struct MikroSetupPage: View {
                 }.padding(22).frame(maxWidth: .infinity, alignment: .leading).background(Studio.surface, in: RoundedRectangle(cornerRadius: 12))
                 HStack(alignment: .top, spacing: 9) {
                     Image(systemName: "info.circle").foregroundStyle(Studio.muted)
-                    Text("No Native Access, Komplete Kontrol, or NIHostIntegrationAgent needed. If your controller is busy, close other controller software and reconnect the USB cable.")
+                    Text("Controller busy? Close other controller software and reconnect USB.")
                         .font(.system(size: 11)).foregroundStyle(Studio.muted).lineSpacing(4)
                 }
             }.padding(28)
@@ -119,13 +110,4 @@ struct MikroSetupPage: View {
     }
 
     private func label(_ text: String) -> some View { Text(text).font(.system(size: 9, weight: .semibold)).tracking(1.5).foregroundStyle(Studio.muted) }
-
-    private func numberField(value: Binding<Int>, range: ClosedRange<Int>) -> some View {
-        HStack(spacing: 6) {
-            TextField("", value: Binding(get: { value.wrappedValue }, set: { value.wrappedValue = min(range.upperBound, max(range.lowerBound, $0)) }), format: .number.grouping(.never))
-                .textFieldStyle(.plain).font(.system(size: 13, weight: .medium, design: .monospaced)).multilineTextAlignment(.trailing).frame(width: 32)
-                .accessibilityLabel("MIDI value")
-            Stepper("", value: value, in: range).labelsHidden().controlSize(.mini).fixedSize()
-        }.padding(.vertical, 4).padding(.leading, 7).padding(.trailing, 3).background(Studio.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 5))
-    }
 }

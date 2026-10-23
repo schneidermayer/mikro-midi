@@ -91,8 +91,9 @@ impl Lights {
     }
 
     pub fn write(&self, h: &HidDevice) -> HidResult<()> {
-        h.write(&[&[0x80u8] as &[u8], &self.status].concat())?;
-
+        let mut report = [0x80; 81];
+        report[1..].copy_from_slice(&self.status);
+        h.write(&report)?;
         Ok(())
     }
 }

@@ -1,3 +1,7 @@
-notemaps = [49, 27, 31, 57, 48, 47, 43, 59, 36, 38, 46, 51, 36, 38, 42, 44]
-client_name = "Maschine Mikro MK3"
-port_name = "Maschine Mikro MK3 MIDI Out"
+# Optional CLI overrides. Unspecified settings use defaults.
+# Pads are stored top row first; physical pad 1 is bottom left.
+notemaps = [48, 49, 50, 51, 44, 45, 46, 47, 40, 41, 42, 43, 36, 37, 38, 39]
+midi_channel = 1
+encoder_cc = 1
+encoder_mode = "relative"
+touch_strip_cc = 9

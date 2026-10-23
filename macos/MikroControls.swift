@@ -30,8 +30,8 @@ struct KnobWorkspace: View {
                     knobButton(39, title: "Press", icon: "hand.tap")
                     knobButton(40, title: "Touch", icon: "hand.point.up")
                     VStack(alignment: .leading, spacing: 9) {
-                        overline("MAKE THE CONNECTION")
-                        Text("Use MIDI learn in your DAW to assign the knob. For relative mode, match its encoder format to the one above.")
+                        overline("MIDI LEARN")
+                        Text("Assign the knob using MIDI Learn in your DAW. Match the relative format when using relative mode.")
                             .font(.system(size: 11)).foregroundStyle(Studio.muted).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
                     }.padding(18).frame(maxWidth: .infinity, alignment: .leading).background(Studio.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 11))
                 }
@@ -75,7 +75,7 @@ struct KnobWorkspace: View {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 5) { overline("MODE"); Text(absolute ? "Absolute" : "Relative").font(.system(size: 13, weight: .medium)).foregroundStyle(Studio.accent) }
             }
-            Text("Turn your Mikro’s knob to see it respond.").font(.system(size: 10)).foregroundStyle(Studio.muted)
+            Text("Turn the knob to see its value.").font(.system(size: 10)).foregroundStyle(Studio.muted)
         }
     }
 
@@ -92,7 +92,7 @@ struct KnobWorkspace: View {
                         rangeValue("Maximum", binding: Binding(get: { model.settings.encoder_max }, set: { model.setEncoderMaximum($0) }), range: (model.settings.encoder_min + 1)...127)
                         rangeValue("Initial", binding: $model.settings.encoder_initial, range: model.settings.encoder_min...model.settings.encoder_max)
                     }
-                    Text("Initial is the starting value. Turning sends the next value within this range.").font(.system(size: 10)).foregroundStyle(Studio.muted).fixedSize(horizontal: false, vertical: true)
+                    Text("Turning sends values within this range.").font(.system(size: 10)).foregroundStyle(Studio.muted).fixedSize(horizontal: false, vertical: true)
                 } else {
                     overline("DAW ENCODER FORMAT")
                     Picker("Encoder format", selection: $model.settings.encoder_relative_format) {
@@ -162,19 +162,18 @@ struct TouchStripWorkspace: View {
                     }.padding(13).background(Studio.inset, in: RoundedRectangle(cornerRadius: 10))
                         .shadow(color: Studio.accent.opacity(model.stripTouched ? 0.08 : 0), radius: 18)
                         .animation(reduceMotion ? nil : .easeOut(duration: 0.07), value: model.stripValue)
-                    HStack { Text("LEFT"); Spacer(); Text("Move your finger along the hardware strip."); Spacer(); Text("RIGHT") }.font(.system(size: 10)).foregroundStyle(Studio.muted)
+                    HStack { Text("LEFT"); Spacer(); Text("RIGHT") }.font(.system(size: 10)).foregroundStyle(Studio.muted)
                 }.padding(26).background(Studio.surface, in: RoundedRectangle(cornerRadius: 14))
                 HStack(alignment: .top, spacing: 18) {
                     VStack(alignment: .leading, spacing: 20) {
                         overline("STRIP MAPPING")
                         Picker("Touch strip mode", selection: $model.settings.touch_strip_mode) { Text("Control change").tag("cc"); Text("Pitch bend").tag("pitch_bend") }.pickerStyle(.segmented).labelsHidden()
                         HStack { Text("MIDI CC").foregroundStyle(pitchBend ? Studio.muted : Studio.text); Spacer(); MIDIIntegerField(value: $model.settings.touch_strip_cc, range: 0...127, label: "Touch strip MIDI CC").disabled(pitchBend).opacity(pitchBend ? 0.4 : 1) }
-                        Text(pitchBend ? "Pitch bend uses its own MIDI message. CC is unused in this mode." : "Control change sends values from 0 to 127.").font(.system(size: 11)).foregroundStyle(Studio.muted).fixedSize(horizontal: false, vertical: true)
+                        Text(pitchBend ? "CC is unused in pitch-bend mode." : "Sends values from 0 to 127.").font(.system(size: 11)).foregroundStyle(Studio.muted).fixedSize(horizontal: false, vertical: true)
                     }.padding(24).frame(maxWidth: .infinity).background(Studio.surface, in: RoundedRectangle(cornerRadius: 12))
                     VStack(alignment: .leading, spacing: 15) {
-                        overline("A LITTLE MOVEMENT")
-                        Text(pitchBend ? "Bend a lead. Add a little life." : "Open a filter. Sweep an effect.").font(.system(size: 20, weight: .medium)).tracking(-0.4)
-                        Text(pitchBend ? "Your instrument controls the pitch-bend range. Pitch stays at the last position. Use Panic in Setup to return to center." : "Use MIDI learn in your DAW to connect this strip to a parameter. Its last CC value stays in place when you lift your finger.")
+                        overline("BEHAVIOR")
+                        Text(pitchBend ? "Your instrument sets the bend range. Pitch holds on release; Panic resets it." : "Assign with MIDI Learn in your DAW. The value holds when you lift your finger.")
                             .font(.system(size: 12)).foregroundStyle(Studio.muted).lineSpacing(4).fixedSize(horizontal: false, vertical: true)
                     }.padding(24).frame(maxWidth: .infinity, alignment: .leading).background(Studio.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
                 }

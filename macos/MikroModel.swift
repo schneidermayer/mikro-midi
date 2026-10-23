@@ -34,8 +34,7 @@ struct MikroSettings: Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        // Missing fields take their defaults so earlier saved setups and presets
-        // migrate without losing any user mappings.
+        // Preserve older presets when new settings are added.
         notemaps = try c.decodeIfPresent([Int].self, forKey: .notemaps) ?? notemaps
         pad_colors = try c.decodeIfPresent([Int].self, forKey: .pad_colors) ?? pad_colors
         pad_idle_brightness = try c.decodeIfPresent(Int.self, forKey: .pad_idle_brightness) ?? pad_idle_brightness
@@ -57,6 +56,12 @@ struct MikroSettings: Codable, Equatable {
         port_name = try c.decodeIfPresent(String.self, forKey: .port_name) ?? port_name
     }
 
+    func write(to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(self).write(to: url, options: .atomic)
+    }
+
     func validated() throws -> MikroSettings {
         guard notemaps.count == 16, pad_colors.count == 16, button_ccs.count == 41,
               notemaps.allSatisfy({ (0...127).contains($0) }),
@@ -73,8 +78,7 @@ struct MikroSettings: Codable, Equatable {
               !port_name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !client_name.contains("\0"), !port_name.contains("\0")
         else { throw NSError(domain: "Mikro MIDI", code: 1, userInfo: [NSLocalizedDescriptionKey: "This preset has invalid MIDI mappings or colors."]) }
-        // The helper owns one stable MIDI endpoint. CLI presets may name their
-        // own ports, but importing their mappings must not rename a live source.
+        // Imported CLI presets must not rename the app’s live MIDI endpoint.
         var result = self
         result.client_name = "Mikro MIDI"
         result.port_name = "Mikro MIDI"
@@ -91,15 +95,6 @@ enum Workspace: String, CaseIterable {
         case .knob: return "dial.medium"
         case .touchStrip: return "slider.horizontal.below.rectangle"
         case .setup: return "gearshape"
-        }
-    }
-    var headline: String {
-        switch self {
-        case .pads: return "Make it yours."
-        case .buttons: return "Every button. Your call."
-        case .knob: return "Find your sweet spot."
-        case .touchStrip: return "A touch more expression."
-        case .setup: return "Ready to make music."
         }
     }
 }
@@ -144,7 +139,6 @@ struct ActivityItem: Identifiable {
     var glowEnabled = UserDefaults.standard.object(forKey: "padGlow") as? Bool ?? true {
         didSet { if !preview { UserDefaults.standard.set(glowEnabled, forKey: "padGlow") } }
     }
-    var selectedButton = 22
     var state = "stopped"
     var statusMessage = "Ready when you are"
     var activePads = Set<Int>()
@@ -159,7 +153,6 @@ struct ActivityItem: Identifiable {
     var stripValue = 0
     var stripTouched = false
     var errorMessage: String?
-    var presetName = "Custom palette"
     var canUndoAssignmentReset = false
     var autoStart: Bool { didSet { UserDefaults.standard.set(autoStart, forKey: "autoStart") } }
     var hasProcess = false
@@ -239,7 +232,6 @@ struct ActivityItem: Identifiable {
         var colors = settings.pad_colors
         for index in selectedPads { colors[index] = code }
         settings.pad_colors = colors
-        presetName = "Custom palette"
     }
 
     func transposeSelection(_ semitones: Int) {
@@ -330,7 +322,7 @@ struct ActivityItem: Identifiable {
 
     func stop() {
         guard let child = process else { return }
-        send(["command": "stop"])
+        send("stop")
         state = "stopped"
         statusMessage = "Stopping driver…"
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self, weak child] in
@@ -343,7 +335,7 @@ struct ActivityItem: Identifiable {
         saveWork?.cancel()
         persist()
         guard let child = process else { DispatchQueue.main.async { completion() }; return }
-        send(["command": "stop"])
+        send("stop")
         inputPipe?.fileHandleForWriting.closeFile()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             if child.isRunning { child.terminate() }
@@ -355,7 +347,7 @@ struct ActivityItem: Identifiable {
     }
 
     func panic() {
-        send(["command": "panic"])
+        send("panic")
         activePads.removeAll()
         glowingPads.removeAll()
         activeButtons.removeAll()
@@ -368,10 +360,7 @@ struct ActivityItem: Identifiable {
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.persist()
-            if let data = try? JSONEncoder().encode(self.settings),
-               let dictionary = try? JSONSerialization.jsonObject(with: data) {
-                self.send(["command": "configure", "settings": dictionary])
-            }
+            self.send("configure", settings: self.settings)
         }
         saveWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: work)
@@ -381,15 +370,18 @@ struct ActivityItem: Identifiable {
         guard !preview else { return }
         do {
             try FileManager.default.createDirectory(at: configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try encoder.encode(settings).write(to: configURL, options: .atomic)
+            try settings.write(to: configURL)
         } catch { errorMessage = "Settings could not be saved: \(error.localizedDescription)" }
     }
 
-    private func send(_ dictionary: [String: Any]) {
+    private struct DriverCommand: Encodable {
+        let command: String
+        let settings: MikroSettings?
+    }
+
+    private func send(_ command: String, settings: MikroSettings? = nil) {
         guard let handle = inputPipe?.fileHandleForWriting, process?.isRunning == true,
-              var data = try? JSONSerialization.data(withJSONObject: dictionary) else { return }
+              var data = try? JSONEncoder().encode(DriverCommand(command: command, settings: settings)) else { return }
         data.append(10)
         do { try handle.write(contentsOf: data) }
         catch { log("Could not update driver: \(error.localizedDescription)") }
@@ -408,7 +400,7 @@ struct ActivityItem: Identifiable {
     }
 
     private func receive(_ event: [String: Any]) {
-        let type = event["event"] as? String ?? event["type"] as? String ?? ""
+        let type = event["type"] as? String ?? ""
         switch type {
         case "status":
             state = event["state"] as? String ?? state
@@ -464,7 +456,6 @@ struct ActivityItem: Identifiable {
 
     func applyTheme(_ name: String) {
         guard let theme = PadTheme.all.first(where: { $0.name == name }) else { return }
-        presetName = name
         if paletteUsesSelection {
             var colors = settings.pad_colors
             for index in selectedPads { colors[index] = theme.colors[index] }
@@ -497,28 +488,16 @@ struct ActivityItem: Identifiable {
     }
 
     private func applyAssignments(from source: MikroSettings) {
-        var next = settings
-        next.notemaps = source.notemaps
-        next.midi_channel = source.midi_channel
-        next.button_ccs = source.button_ccs
-        next.encoder_cc = source.encoder_cc
-        next.encoder_mode = source.encoder_mode
-        next.encoder_step = source.encoder_step
-        next.encoder_invert = source.encoder_invert
-        next.encoder_relative_format = source.encoder_relative_format
-        next.encoder_min = source.encoder_min
-        next.encoder_max = source.encoder_max
-        next.encoder_initial = source.encoder_initial
-        next.touch_strip_cc = source.touch_strip_cc
-        next.touch_strip_mode = source.touch_strip_mode
-        next.poly_aftertouch = source.poly_aftertouch
+        var next = source
+        next.pad_colors = settings.pad_colors
+        next.pad_idle_brightness = settings.pad_idle_brightness
+        next.pad_active_brightness = settings.pad_active_brightness
         settings = next
     }
 
     func reset() {
         dismissAssignmentUndo()
         settings = MikroSettings()
-        presetName = "Aurora"
         log("Default mappings restored")
     }
 
@@ -529,9 +508,7 @@ struct ActivityItem: Identifiable {
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try encoder.encode(settings).write(to: url, options: .atomic)
+            try settings.write(to: url)
         } catch { errorMessage = "Could not export preset: \(error.localizedDescription)" }
     }
 
@@ -543,8 +520,7 @@ struct ActivityItem: Identifiable {
         do {
             settings = try JSONDecoder().decode(MikroSettings.self, from: Data(contentsOf: url)).validated()
             dismissAssignmentUndo()
-            presetName = url.deletingPathExtension().lastPathComponent
-            log("Loaded preset: \(presetName)")
+            log("Loaded preset: \(url.deletingPathExtension().lastPathComponent)")
         } catch { errorMessage = "Could not import preset: \(error.localizedDescription)" }
     }
 }

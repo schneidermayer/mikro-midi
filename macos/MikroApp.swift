@@ -68,11 +68,9 @@ struct MikroWindow: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            MikroSidebar(model: model)
+            MikroSidebar(model: model, showingReset: $showingReset)
             Rectangle().fill(Studio.line).frame(width: 1)
             VStack(spacing: 0) {
-                MikroHeader(model: model, showingReset: $showingReset)
-                Rectangle().fill(Studio.line).frame(height: 1)
                 ZStack {
                     ForEach(Workspace.allCases, id: \.self) { workspace in
                         if preparedPages.contains(workspace) || model.workspace == workspace {

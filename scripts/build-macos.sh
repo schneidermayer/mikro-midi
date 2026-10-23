@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-# Build a self-contained Apple Silicon app. No Xcode project or NI runtime needed.
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
@@ -81,14 +80,15 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 plutil -lint "$APP/Contents/Info.plist"
+SIGN_FLAGS=(--force --sign "$SIGNING_IDENTITY")
 if [[ "$SIGNING_IDENTITY" == - ]]; then
-  codesign --force --sign - --timestamp=none "$APP/Contents/MacOS/mikro-driver"
-  codesign --force --sign - --timestamp=none "$APP"
+  SIGN_FLAGS+=(--timestamp=none)
 else
-  codesign --force --sign "$SIGNING_IDENTITY" --options runtime --timestamp \
-    "$APP/Contents/MacOS/mikro-driver"
-  codesign --force --sign "$SIGNING_IDENTITY" --options runtime --timestamp "$APP"
+  SIGN_FLAGS+=(--options runtime --timestamp)
 fi
+for target in "$APP/Contents/MacOS/mikro-driver" "$APP"; do
+  codesign "${SIGN_FLAGS[@]}" "$target"
+done
 codesign --verify --deep --strict --verbose=2 "$APP"
 
 rm -f "$ARCHIVE" "$ARCHIVE.sha256"

@@ -150,21 +150,16 @@ fn run(args: &Args, reporter: &Reporter) -> DriverResult<()> {
         {
             // Bound each batch so a busy UI cannot starve the HID reader.
             for command in commands.try_iter().take(100) {
-                match command {
-                    Err(message) => reporter.error(message)?,
+                let effects = match command {
+                    Err(message) => {
+                        reporter.error(message)?;
+                        continue;
+                    }
                     Ok(Command::Stop {}) => {
                         running.store(false, Ordering::Relaxed);
                         break;
                     }
-                    Ok(Command::Panic {}) => {
-                        deliver(engine.panic(), &mut port, reporter)?;
-                        engine.paint(&mut lights);
-                        if let Some(hid) = &device
-                            && let Err(error) = lights.write(hid)
-                        {
-                            reporter.error(format!("Could not update lights: {error}"))?;
-                        }
-                    }
+                    Ok(Command::Panic {}) => engine.panic(),
                     Ok(Command::Configure { settings }) => {
                         if let Err(error) = settings.validate() {
                             reporter.error(format!("Configuration rejected: {error}"))?;
@@ -176,14 +171,15 @@ fn run(args: &Args, reporter: &Reporter) -> DriverResult<()> {
                             reporter.error("Configuration rejected: restart the driver to change client_name or port_name.")?;
                             continue;
                         }
-                        deliver(engine.configure(*settings), &mut port, reporter)?;
-                        engine.paint(&mut lights);
-                        if let Some(hid) = &device
-                            && let Err(error) = lights.write(hid)
-                        {
-                            reporter.error(format!("Could not update lights: {error}"))?;
-                        }
+                        engine.configure(*settings)
                     }
+                };
+                deliver(effects, &mut port, reporter)?;
+                engine.paint(&mut lights);
+                if let Some(hid) = &device
+                    && let Err(error) = lights.write(hid)
+                {
+                    reporter.error(format!("Could not update lights: {error}"))?;
                 }
             }
             if !running.load(Ordering::Relaxed) {
