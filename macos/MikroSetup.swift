@@ -36,17 +36,7 @@ struct MikroSetupPage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                HStack(spacing: 18) {
-                    Image(systemName: "arrow.counterclockwise").font(.system(size: 19)).foregroundStyle(Studio.accent)
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("Reset MIDI assignments").font(.system(size: 13, weight: .semibold))
-                        Text("Restore default mappings. Keep colors and brightness.")
-                            .font(.system(size: 11)).foregroundStyle(Studio.muted).fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer()
-                    Button("Reset assignments") { model.resetAssignments() }
-                        .buttonStyle(.bordered).controlSize(.small).accessibilityLabel("Reset MIDI assignments")
-                }.padding(19).background(Studio.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+                appBehaviorCard
                 HStack(alignment: .top, spacing: 20) {
                     VStack(alignment: .leading, spacing: 22) {
                         label("MIDI & HARDWARE")
@@ -61,7 +51,6 @@ struct MikroSetupPage: View {
                         }
                         Toggle("Pad glow in this app", isOn: $model.glowEnabled).toggleStyle(.switch).controlSize(.small)
                         Toggle("Polyphonic aftertouch", isOn: $model.settings.poly_aftertouch).toggleStyle(.switch).controlSize(.small)
-                        Toggle("Start driver when app opens", isOn: $model.autoStart).toggleStyle(.switch).controlSize(.small)
                         Button { model.panic() } label: {
                             Label("All notes off (Panic)", systemImage: "speaker.slash")
                                 .font(.system(size: 11, weight: .medium)).frame(maxWidth: .infinity).padding(.vertical, 9)
@@ -76,6 +65,17 @@ struct MikroSetupPage: View {
                         helpStep("3", "Load an instrument", "Load a drum kit or synth. Mikro MIDI sends MIDI, not audio.")
                     }.padding(22).frame(maxWidth: .infinity).background(Studio.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
                 }
+                HStack(spacing: 18) {
+                    Image(systemName: "arrow.counterclockwise").font(.system(size: 19)).foregroundStyle(Studio.accent)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Reset MIDI assignments").font(.system(size: 13, weight: .semibold))
+                        Text("Restore default mappings. Keep colors and brightness.")
+                            .font(.system(size: 11)).foregroundStyle(Studio.muted).fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    Button("Reset assignments") { model.resetAssignments() }
+                        .buttonStyle(.bordered).controlSize(.small).accessibilityLabel("Reset MIDI assignments")
+                }.padding(19).background(Studio.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
                 VStack(alignment: .leading, spacing: 14) {
                     HStack { label("LIVE ACTIVITY"); Spacer(); Button("Clear") { model.activity = [] }.buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Studio.muted) }
                     if model.activity.isEmpty {
@@ -96,6 +96,53 @@ struct MikroSetupPage: View {
                         .font(.system(size: 11)).foregroundStyle(Studio.muted).lineSpacing(4)
                 }
             }.padding(28)
+        }
+    }
+
+    private var appBehaviorCard: some View {
+        @Bindable var behavior = model.appBehavior
+        return VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: "macwindow")
+                    .font(.system(size: 20, weight: .light)).foregroundStyle(Studio.accent)
+                    .frame(width: 38, height: 38)
+                    .background(Studio.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("App behavior").font(.system(size: 15, weight: .semibold))
+                    Text("Keep MIDI running while you focus on your music.")
+                        .font(.system(size: 11)).foregroundStyle(Studio.muted)
+                }
+                Spacer()
+                Button("Run in background") { behavior.hideWindow() }
+                    .buttonStyle(.bordered).controlSize(.small)
+                    .help("Close this window and keep Mikro MIDI running.")
+            }
+            Rectangle().fill(Studio.line).frame(height: 1)
+            HStack(alignment: .top, spacing: 30) {
+                VStack(alignment: .leading, spacing: 20) {
+                    behaviorToggle("Keep running when window closes", detail: "Closing the window keeps the driver active.", isOn: $behavior.runInBackground)
+                    behaviorToggle("Start driver when app opens", detail: "Connect to your Mikro automatically.", isOn: $model.autoStart)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 20) {
+                    behaviorToggle("Show in menu bar", detail: "Quick access to status and driver controls.", isOn: $behavior.showInMenuBar)
+                    behaviorToggle("Show in Dock", detail: "Reopen the window from the Dock or ⌘ Tab.", isOn: $behavior.showInDock)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Text("Reopen from the menu bar or Dock. Quit Mikro MIDI to stop the driver.")
+                .font(.system(size: 11)).foregroundStyle(Studio.muted)
+        }
+        .padding(22).background(Studio.surface, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Studio.line))
+    }
+
+    private func behaviorToggle(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.system(size: 12, weight: .medium))
+                Text(detail).font(.system(size: 10)).foregroundStyle(Studio.muted)
+            }.fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Toggle(title, isOn: isOn).labelsHidden().toggleStyle(.switch).controlSize(.small)
         }
     }
 

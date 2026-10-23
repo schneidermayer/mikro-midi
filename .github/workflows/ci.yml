@@ -23,6 +23,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Test MIDI mapping and driver
         run: cargo test --workspace --locked
+      - name: Test app behavior preferences
+        run: make check-app
       - name: Build and sign locally
         run: ./scripts/build-macos.sh
       - uses: actions/upload-artifact@v4

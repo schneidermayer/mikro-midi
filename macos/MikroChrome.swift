@@ -28,18 +28,10 @@ struct MikroSidebar: View {
                     .background(model.workspace == item ? Studio.accent.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 9))
                 }.buttonStyle(.plain).accessibilityLabel(item.rawValue).padding(.bottom, 5)
             }
-            Spacer(minLength: 20)
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 8) {
-                    Image(systemName: "cable.connector").font(.system(size: 15)).foregroundStyle(Studio.muted)
-                    Text("MASCHINE\nMIKRO MK3").font(.system(size: 10, weight: .semibold)).tracking(0.8).lineSpacing(3)
-                }
-                HStack(spacing: 6) {
-                    Circle().fill(model.connected ? Studio.accent : Studio.muted).frame(width: 5, height: 5)
-                    Text(model.stateTitle).font(.system(size: 10, weight: .medium)).lineLimit(1).minimumScaleFactor(0.8)
-                }.foregroundStyle(model.connected ? Studio.accent : Studio.muted)
-                    .frame(maxWidth: .infinity).padding(.vertical, 7)
-                    .background(Studio.surface, in: Capsule())
+            Spacer(minLength: 28)
+            label("CONTROLLER").padding(.leading, 10).padding(.bottom, 10)
+            controllerCard
+            VStack(spacing: 4) {
                 Menu {
                     Button("Import Preset…") { model.importPreset() }
                     Button("Export Preset…") { model.exportPreset() }
@@ -47,26 +39,71 @@ struct MikroSidebar: View {
                     Button("Reset MIDI Assignments") { model.resetAssignments() }
                     Button("Restore Defaults…", role: .destructive) { showingReset = true }
                 } label: {
-                    Label("Presets", systemImage: "square.stack")
-                        .font(.system(size: 11, weight: .medium))
-                        .frame(maxWidth: .infinity).padding(.vertical, 8)
-                }.menuStyle(.borderlessButton)
-                    .padding(.horizontal, 8).background(Studio.surface, in: RoundedRectangle(cornerRadius: 6))
-                    .accessibilityLabel("Presets")
-                Button { if model.hasProcess { model.stop() } else { model.start() } } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: model.hasProcess ? "stop.fill" : "play.fill").font(.system(size: 9))
-                        Text(model.hasProcess ? "Stop driver" : "Start driver").font(.system(size: 11, weight: .medium))
-                    }.frame(maxWidth: .infinity).padding(.vertical, 9)
-                        .background(Studio.line, in: RoundedRectangle(cornerRadius: 6))
-                }.buttonStyle(.plain).disabled(model.preview)
-            }.padding(14).background(Studio.inset, in: RoundedRectangle(cornerRadius: 12))
+                    actionLabel("Presets", icon: "square.stack", accessory: "chevron.down")
+                }
+                .menuStyle(.button).menuIndicator(.hidden)
+                .buttonStyle(SidebarActionStyle()).accessibilityLabel("Presets")
+
+                Button { model.appBehavior.hideWindow() } label: {
+                    actionLabel("Run in background", icon: "macwindow", accessory: "arrow.down.right")
+                }
+                .buttonStyle(SidebarActionStyle())
+                .help("Close this window and keep Mikro MIDI running. Reopen it from the menu bar or Dock.")
+            }.padding(.top, 10)
             HStack(spacing: 5) {
                 Text("OPEN SOURCE").font(.system(size: 8, weight: .medium)).tracking(1.2)
                 Spacer()
                 Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")").font(.system(size: 9, design: .monospaced))
             }.foregroundStyle(Studio.muted.opacity(0.7)).padding(.top, 18).padding(.bottom, 23)
-        }.padding(.horizontal, 20).frame(width: 190).background(Studio.sidebar)
+        }.padding(.horizontal, 16).frame(width: 214).background(Studio.sidebar)
+    }
+
+    private var controllerCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "square.grid.4x3.fill")
+                    .font(.system(size: 19, weight: .light))
+                    .foregroundStyle(Studio.accent.opacity(0.8))
+                    .frame(width: 34, height: 34)
+                    .background(Studio.accent.opacity(0.065), in: RoundedRectangle(cornerRadius: 8))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Maschine").font(.system(size: 12, weight: .semibold))
+                    Text("Mikro MK3").font(.system(size: 11)).foregroundStyle(Studio.muted)
+                }
+            }
+            Rectangle().fill(Studio.line).frame(height: 1)
+            HStack(spacing: 7) {
+                Circle().fill(model.connected ? Studio.accent : Studio.muted).frame(width: 5, height: 5)
+                Text(model.stateTitle)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(model.connected ? Studio.accent : Studio.muted)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Button { if model.hasProcess { model.stop() } else { model.start() } } label: {
+                    Image(systemName: model.hasProcess ? "stop.fill" : "play.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(SidebarActionStyle(filled: true))
+                .disabled(model.preview)
+                .accessibilityLabel(model.hasProcess ? "Stop driver" : "Start driver")
+                .help(model.hasProcess ? "Stop MIDI driver" : "Start MIDI driver")
+            }
+        }
+        .padding(12)
+        .background(Studio.surface.opacity(0.55), in: RoundedRectangle(cornerRadius: 11))
+        .overlay(RoundedRectangle(cornerRadius: 11).strokeBorder(Studio.line))
+    }
+
+    private func actionLabel(_ title: String, icon: String, accessory: String) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon).font(.system(size: 12)).frame(width: 17)
+            Text(title).font(.system(size: 11, weight: .medium))
+            Spacer(minLength: 0)
+            Image(systemName: accessory).font(.system(size: 8, weight: .semibold)).foregroundStyle(Studio.muted)
+        }
+        .padding(.horizontal, 10).frame(height: 36).contentShape(Rectangle())
+        .accessibilityElement(children: .ignore).accessibilityLabel(title)
     }
 
     private var logo: some View {
@@ -76,6 +113,29 @@ struct MikroSidebar: View {
     }
 
     private func label(_ text: String) -> some View { Text(text).font(.system(size: 9, weight: .semibold)).tracking(1.5).foregroundStyle(Studio.muted) }
+}
+
+private struct SidebarActionStyle: ButtonStyle {
+    var filled = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        SidebarActionBody(configuration: configuration, filled: filled)
+    }
+
+    private struct SidebarActionBody: View {
+        let configuration: ButtonStyle.Configuration
+        let filled: Bool
+        @Environment(\.isEnabled) private var isEnabled
+        @State private var hovering = false
+
+        var body: some View {
+            configuration.label
+                .foregroundStyle(hovering ? Studio.text : Studio.muted)
+                .background(Studio.text.opacity(configuration.isPressed ? 0.12 : hovering ? 0.07 : filled ? 0.04 : 0), in: RoundedRectangle(cornerRadius: 7))
+                .opacity(isEnabled ? 1 : 0.4)
+                .onHover { hovering = $0 }
+        }
+    }
 }
 
 struct MikroFooter: View {

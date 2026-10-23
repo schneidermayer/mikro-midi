@@ -20,14 +20,18 @@ extension Color {
     }
 }
 
-final class MikroAppDelegate: NSObject, NSApplicationDelegate {
+@MainActor final class MikroAppDelegate: NSObject, NSApplicationDelegate {
     var model: MikroModel?
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        !(model?.appBehavior.runInBackground ?? true)
+    }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        model?.appBehavior.showWindow()
+        return false
+    }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let model else { return .terminateNow }
-        MainActor.assumeIsolated {
-            model.shutdown { sender.reply(toApplicationShouldTerminate: true) }
-        }
+        model.shutdown { sender.reply(toApplicationShouldTerminate: true) }
         return .terminateLater
     }
 }
@@ -37,7 +41,7 @@ final class MikroAppDelegate: NSObject, NSApplicationDelegate {
     @State private var model = MikroModel()
 
     var body: some Scene {
-        WindowGroup("Mikro MIDI", id: "main") {
+        Window("Mikro MIDI", id: "main") {
             MikroWindow(model: model)
                 .preferredColorScheme(.dark)
                 .onAppear { delegate.model = model; NSApplication.shared.activate(ignoringOtherApps: true) }
@@ -54,14 +58,33 @@ final class MikroAppDelegate: NSObject, NSApplicationDelegate {
                 Button("Import Preset…") { model.importPreset() }.keyboardShortcut("o")
                 Button("Export Preset…") { model.exportPreset() }.keyboardShortcut("s", modifiers: [.command, .shift])
             }
+            CommandGroup(after: .appSettings) {
+                Button("App behavior…") {
+                    model.workspace = .setup
+                    model.appBehavior.showWindow()
+                }.keyboardShortcut(",")
+                Button("Run in background") { model.appBehavior.hideWindow() }
+            }
             CommandGroup(replacing: .help) {
-                Button("Mikro MIDI Help") { model.workspace = .setup }
+                Button("Mikro MIDI Help") {
+                    model.workspace = .setup
+                    model.appBehavior.showWindow()
+                }
             }
         }
+        MenuBarExtra(isInserted: Binding(
+            get: { model.appBehavior.showInMenuBar },
+            set: { model.appBehavior.showInMenuBar = $0 }
+        )) {
+            MikroMenuBarContent(model: model)
+        } label: {
+            Image(systemName: "square.grid.3x3.fill").accessibilityLabel("Mikro MIDI")
+        }.menuBarExtraStyle(.menu)
     }
 }
 
 struct MikroWindow: View {
+    @Environment(\.openWindow) private var openWindow
     @Bindable var model: MikroModel
     @State private var showingReset = false
     @State private var preparedPages: Set<Workspace> = [.pads]
@@ -92,6 +115,8 @@ struct MikroWindow: View {
         .foregroundStyle(Studio.text)
         .font(.system(size: 13))
         .tint(Studio.accent)
+        .background(MikroWindowRegistration(behavior: model.appBehavior))
+        .onAppear { model.appBehavior.openEditor = { openWindow(id: "main") } }
         .onChange(of: model.workspace) { _, workspace in preparedPages.insert(workspace) }
         .task {
             // Build native controls once, after the first frame. Retained pages
@@ -116,5 +141,54 @@ struct MikroWindow: View {
         case .touchStrip: TouchStripWorkspace(model: model)
         case .setup: MikroSetupPage(model: model)
         }
+    }
+}
+
+struct MikroWindowRegistration: NSViewRepresentable {
+    let behavior: MikroAppBehavior
+
+    func makeNSView(context: Context) -> RegistrationView { RegistrationView(behavior: behavior) }
+    func updateNSView(_ nsView: RegistrationView, context: Context) { }
+
+    final class RegistrationView: NSView {
+        let behavior: MikroAppBehavior
+
+        init(behavior: MikroAppBehavior) {
+            self.behavior = behavior
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let window { behavior.attach(window: window) }
+        }
+    }
+}
+
+struct MikroMenuBarContent: View {
+    @Bindable var model: MikroModel
+
+    var body: some View {
+        Text("Maschine Mikro MK3 · \(model.stateTitle)")
+        Divider()
+        Button("Show Mikro MIDI") { model.appBehavior.showWindow() }
+        Button(model.hasProcess ? "Stop driver" : "Start driver") {
+            if model.hasProcess { model.stop() } else { model.start() }
+        }.disabled(model.preview)
+        Button("All notes off (Panic)") { model.panic() }.disabled(!model.hasProcess)
+        Divider()
+        Menu("App behavior") {
+            Toggle("Run in background", isOn: $model.appBehavior.runInBackground)
+            Toggle("Show in menu bar", isOn: $model.appBehavior.showInMenuBar)
+            Toggle("Show in Dock", isOn: $model.appBehavior.showInDock)
+        }
+        Button("Setup…") {
+            model.workspace = .setup
+            model.appBehavior.showWindow()
+        }
+        Divider()
+        Button("Quit Mikro MIDI") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")
     }
 }

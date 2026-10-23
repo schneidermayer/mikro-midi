@@ -154,9 +154,10 @@ struct ActivityItem: Identifiable {
     var stripTouched = false
     var errorMessage: String?
     var canUndoAssignmentReset = false
-    var autoStart: Bool { didSet { UserDefaults.standard.set(autoStart, forKey: "autoStart") } }
+    var autoStart: Bool { didSet { if !preview { UserDefaults.standard.set(autoStart, forKey: "autoStart") } } }
     var hasProcess = false
     let preview: Bool
+    var appBehavior: MikroAppBehavior
     let configURL: URL
     @ObservationIgnored private var process: Process?
     @ObservationIgnored private var inputPipe: Pipe?
@@ -173,7 +174,8 @@ struct ActivityItem: Identifiable {
 
     init() {
         preview = CommandLine.arguments.contains("--preview")
-        autoStart = UserDefaults.standard.object(forKey: "autoStart") as? Bool ?? true
+        appBehavior = MikroAppBehavior(preview: preview)
+        autoStart = preview ? true : UserDefaults.standard.object(forKey: "autoStart") as? Bool ?? true
         configURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Mikro MIDI/settings.json")
         if let data = try? Data(contentsOf: configURL) {

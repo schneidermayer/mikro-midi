@@ -16,7 +16,7 @@ Requires **Apple Silicon, macOS 14+, and Maschine Mikro MK3**. Release downloads
 2. Plug in your Mikro and open the app. No button combination is needed.
 3. Enable **Mikro MIDI** as an input in your music app and load an instrument.
 
-Keep the helper open while playing. Your music app supplies the sound.
+Mikro MIDI keeps running when you close its window. Reopen it from the menu bar or Dock; choose **Quit Mikro MIDI** to stop the driver. Your music app supplies the sound.
 
 ## Controls
 
@@ -25,6 +25,8 @@ Keep the helper open while playing. Your music app supplies the sound.
 - **Knob:** relative or absolute CC, direction, step size, range, and separate press/touch mappings.
 - **Touch strip:** CC or 14-bit pitch bend.
 - **Presets:** import/export JSON from the sidebar. Settings save automatically. **Setup → Reset MIDI assignments** preserves colors and supports Undo.
+- **Background:** choose **Run in background** in the sidebar to close the window and keep playing. In **Setup → App behavior** (⌘,), choose whether closing the window keeps the app running and whether it appears in the menu bar, Dock, or both. At least one remains enabled so you can always reopen the app. These preferences save separately from MIDI presets.
+- **Menu bar:** view controller status, open the window, start or stop the driver, send All notes off, or quit.
 
 ### Buttons
 
@@ -40,7 +42,7 @@ Keep the helper open while playing. Your music app supplies the sound.
 
 ### Setup
 
-![Brightness, reset, MIDI channel, and activity](docs/images/mikro-midi-setup.png)
+![Background behavior, menu bar and Dock visibility, and MIDI settings](docs/images/mikro-midi-setup.png)
 
 ## MIDI defaults
 
