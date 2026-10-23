@@ -5,7 +5,7 @@ import Observation
     var runInBackground: Bool {
         didSet {
             save(runInBackground, forKey: "runInBackground")
-            if !runInBackground, isAttached, mainWindow?.isVisible != true { showWindow() }
+            if !runInBackground, isPrepared, mainWindow?.isVisible != true { showWindow() }
         }
     }
     var showInMenuBar: Bool {
@@ -19,13 +19,13 @@ import Observation
         didSet {
             if !showInDock && !showInMenuBar { showInMenuBar = true }
             save(showInDock, forKey: "showInDock")
-            if isAttached { applyActivationPolicy() }
+            if isPrepared { applyActivationPolicy() }
         }
     }
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let preview: Bool
-    @ObservationIgnored private var isAttached = false
+    @ObservationIgnored private var isPrepared = false
     @ObservationIgnored private weak var mainWindow: NSWindow?
     @ObservationIgnored var openEditor: (() -> Void)?
 
@@ -41,15 +41,18 @@ import Observation
 
     func attach(window: NSWindow) {
         mainWindow = window
-        if !isAttached {
-            isAttached = true
-            applyActivationPolicy()
-        }
+        prepareForLaunch()
+    }
+
+    func prepareForLaunch() {
+        guard !isPrepared else { return }
+        isPrepared = true
+        applyActivationPolicy()
     }
 
     func showWindow() {
         openEditor?()
-        // SwiftUI may need a run-loop turn to recreate a closed Window scene.
+        // Finish the menu action before bringing the editor forward.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             if self.mainWindow?.isMiniaturized == true { self.mainWindow?.deminiaturize(nil) }

@@ -24,7 +24,9 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 type DriverResult<T> = Result<T, Box<dyn Error>>;
+type DriverCommand = Result<Command, String>;
 const DEVICE_NAME: &str = "Maschine Mikro MK3";
+const RECONNECT_INTERVAL: Duration = Duration::from_millis(500);
 
 #[derive(Parser, Debug)]
 #[clap(name = "Mikro MIDI", version = env!("CARGO_PKG_VERSION"), author = env!("CARGO_PKG_AUTHORS"))]
@@ -121,12 +123,19 @@ fn run(args: &Args, reporter: &Reporter) -> DriverResult<()> {
 
     let running = Arc::new(AtomicBool::new(true));
     let signal_running = Arc::clone(&running);
-    ctrlc::set_handler(move || signal_running.store(false, Ordering::Relaxed))?;
+    let (command_sender, commands) = mpsc::channel();
+    let signal_sender = command_sender.clone();
+    ctrlc::set_handler(move || {
+        signal_running.store(false, Ordering::Relaxed);
+        // Wake a disconnected driver immediately instead of waiting for its next USB probe.
+        let _ = signal_sender.send(Ok(Command::Stop {}));
+    })?;
     // Keep this connection alive through USB disconnects, so the DAW keeps its routing.
     let output = MidiOutput::new(&settings.client_name)?;
     let mut port = output.create_virtual(&settings.port_name)?;
     let mut engine = Engine::new(settings);
-    let commands = command_reader(args.json);
+    command_reader(args.json, command_sender);
+    let mut pending_command = None;
     let mut device: Option<HidDevice> = None;
     let mut lights = Lights::new();
     let started = Instant::now();
@@ -149,7 +158,12 @@ fn run(args: &Args, reporter: &Reporter) -> DriverResult<()> {
             && deadline.is_none_or(|limit| started.elapsed() < limit)
         {
             // Bound each batch so a busy UI cannot starve the HID reader.
-            for command in commands.try_iter().take(100) {
+            for command in pending_command
+                .take()
+                .into_iter()
+                .chain(commands.try_iter())
+                .take(100)
+            {
                 let effects = match command {
                     Err(message) => {
                         reporter.error(message)?;
@@ -187,8 +201,14 @@ fn run(args: &Args, reporter: &Reporter) -> DriverResult<()> {
             }
 
             if device.is_none() {
-                if Instant::now() < next_attempt {
-                    std::thread::sleep(Duration::from_millis(20));
+                let now = Instant::now();
+                if now < next_attempt {
+                    // Sleep until useful work arrives: a command, signal, retry, or deadline.
+                    // Keep the received command for the next bounded batch, in FIFO order.
+                    pending_command = wait_for_command(
+                        &commands,
+                        idle_wait_timeout(now, next_attempt, started, deadline),
+                    );
                     continue;
                 }
                 let attempt: DriverResult<HidDevice> = (|| {
@@ -229,7 +249,7 @@ fn run(args: &Args, reporter: &Reporter) -> DriverResult<()> {
                         if !args.wait {
                             return Err(error);
                         }
-                        next_attempt = Instant::now() + Duration::from_millis(500);
+                        next_attempt = Instant::now() + RECONNECT_INTERVAL;
                         continue;
                     }
                 }
@@ -271,7 +291,7 @@ fn run(args: &Args, reporter: &Reporter) -> DriverResult<()> {
                 if !args.wait {
                     return Err(error.into());
                 }
-                next_attempt = Instant::now() + Duration::from_millis(500);
+                next_attempt = Instant::now() + RECONNECT_INTERVAL;
             }
         }
         Ok(())
@@ -329,30 +349,61 @@ fn deliver(
     Ok(())
 }
 
-fn command_reader(stop_at_eof: bool) -> mpsc::Receiver<Result<Command, String>> {
-    let (sender, receiver) = mpsc::channel();
+fn idle_wait_timeout(
+    now: Instant,
+    next_attempt: Instant,
+    started: Instant,
+    duration: Option<Duration>,
+) -> Duration {
+    let until_retry = next_attempt.saturating_duration_since(now);
+    duration.map_or(until_retry, |limit| {
+        until_retry.min(limit.saturating_sub(now.saturating_duration_since(started)))
+    })
+}
+
+fn wait_for_command(
+    commands: &mpsc::Receiver<DriverCommand>,
+    timeout: Duration,
+) -> Option<DriverCommand> {
+    let started = Instant::now();
+    match commands.recv_timeout(timeout) {
+        Ok(command) => Some(command),
+        Err(mpsc::RecvTimeoutError::Timeout) => None,
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            // EOF in CLI mode must not turn the reconnect loop into a busy loop.
+            // The signal handler normally keeps a sender alive and wakes this wait.
+            std::thread::sleep(timeout.saturating_sub(started.elapsed()));
+            None
+        }
+    }
+}
+
+fn command_reader(stop_at_eof: bool, sender: mpsc::Sender<DriverCommand>) {
     std::thread::spawn(move || {
-        for line in io::stdin().lock().lines() {
-            let command = match line {
-                Ok(line) if line.trim().is_empty() => continue,
-                Ok(line) => {
-                    serde_json::from_str(&line).map_err(|error| format!("Invalid command: {error}"))
-                }
-                Err(error) => {
-                    let _ = sender.send(Err(format!("Cannot read commands: {error}")));
-                    break;
-                }
-            };
-            if sender.send(command).is_err() {
-                return;
-            }
-        }
-        // The GUI owns stdin: if it exits, do not leave a hidden driver holding USB.
-        if stop_at_eof {
-            let _ = sender.send(Ok(Command::Stop {}));
-        }
+        read_commands(io::stdin().lock(), stop_at_eof, sender);
     });
-    receiver
+}
+
+fn read_commands(input: impl BufRead, stop_at_eof: bool, sender: mpsc::Sender<DriverCommand>) {
+    for line in input.lines() {
+        let command = match line {
+            Ok(line) if line.trim().is_empty() => continue,
+            Ok(line) => {
+                serde_json::from_str(&line).map_err(|error| format!("Invalid command: {error}"))
+            }
+            Err(error) => {
+                let _ = sender.send(Err(format!("Cannot read commands: {error}")));
+                break;
+            }
+        };
+        if sender.send(command).is_err() {
+            return;
+        }
+    }
+    // The GUI owns stdin: if it exits, do not leave a hidden driver holding USB.
+    if stop_at_eof {
+        let _ = sender.send(Ok(Command::Stop {}));
+    }
 }
 
 #[cfg(test)]
@@ -380,5 +431,86 @@ mod tests {
         assert!(
             serde_json::from_str::<Command>(r#"{"command":"panic","unexpected":true}"#).is_err()
         );
+    }
+
+    #[test]
+    fn idle_wait_uses_the_retry_or_duration_deadline_without_polling() {
+        let started = Instant::now();
+        let now = started + Duration::from_millis(900);
+        let retry = now + RECONNECT_INTERVAL;
+        assert_eq!(
+            idle_wait_timeout(now, retry, started, None),
+            RECONNECT_INTERVAL
+        );
+        assert_eq!(
+            idle_wait_timeout(now, retry, started, Some(Duration::from_secs(1))),
+            Duration::from_millis(100)
+        );
+        assert_eq!(
+            idle_wait_timeout(now, retry, started, Some(Duration::from_millis(800))),
+            Duration::ZERO
+        );
+        assert_eq!(
+            idle_wait_timeout(now, started, started, None),
+            Duration::ZERO
+        );
+    }
+
+    #[test]
+    fn idle_wait_wakes_for_commands_and_preserves_their_order() {
+        let (sender, commands) = mpsc::channel();
+        let writer = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(20));
+            read_commands(
+                &b"{\"command\":\"configure\",\"settings\":{\"midi_channel\":2}}\n{\"command\":\"panic\"}\n{\"command\":\"stop\"}\n"[..],
+                false,
+                sender,
+            );
+        });
+        let started = Instant::now();
+        assert!(matches!(
+            wait_for_command(&commands, Duration::from_secs(5)),
+            Some(Ok(Command::Configure { settings })) if settings.midi_channel == 2
+        ));
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert!(matches!(
+            wait_for_command(&commands, Duration::from_secs(5)),
+            Some(Ok(Command::Panic {}))
+        ));
+        assert!(matches!(
+            wait_for_command(&commands, Duration::from_secs(5)),
+            Some(Ok(Command::Stop {}))
+        ));
+        writer.join().unwrap();
+    }
+
+    #[test]
+    fn closed_command_channel_still_waits_for_the_retry() {
+        let (sender, commands) = mpsc::channel();
+        drop(sender);
+        let timeout = Duration::from_millis(40);
+        let started = Instant::now();
+        assert!(wait_for_command(&commands, timeout).is_none());
+        assert!(started.elapsed() >= timeout);
+    }
+
+    #[test]
+    fn gui_eof_wakes_the_wait_with_stop_but_cli_eof_keeps_running() {
+        let (sender, commands) = mpsc::channel();
+        let writer = std::thread::spawn(move || {
+            read_commands(&b""[..], true, sender);
+        });
+        assert!(matches!(
+            wait_for_command(&commands, Duration::from_secs(5)),
+            Some(Ok(Command::Stop {}))
+        ));
+        writer.join().unwrap();
+
+        let (sender, commands) = mpsc::channel();
+        read_commands(&b""[..], false, sender);
+        assert!(matches!(
+            commands.try_recv(),
+            Err(mpsc::TryRecvError::Disconnected)
+        ));
     }
 }

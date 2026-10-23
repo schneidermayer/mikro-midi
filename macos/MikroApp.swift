@@ -21,44 +21,72 @@ extension Color {
 }
 
 @MainActor final class MikroAppDelegate: NSObject, NSApplicationDelegate {
-    var model: MikroModel?
+    let model = MikroModel()
+    private var editor: NSWindow?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let launchedAtLogin = MikroLaunchContext.isLoginItem(NSAppleEventManager.shared().currentAppleEvent)
+        model.appBehavior.openEditor = { [weak self] in self?.prepareEditor() }
+        model.appBehavior.prepareForLaunch()
+        if !launchedAtLogin { model.appBehavior.showWindow() }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        model.loginItem.refresh()
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        !(model?.appBehavior.runInBackground ?? true)
+        !model.appBehavior.runInBackground
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        model?.appBehavior.showWindow()
+        model.appBehavior.showWindow()
         return false
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let model else { return .terminateNow }
         model.shutdown { sender.reply(toApplicationShouldTerminate: true) }
         return .terminateLater
+    }
+
+    private func prepareEditor() {
+        guard editor == nil else { return }
+        // Create the editor only on request. A SwiftUI Window scene automatically
+        // opens on macOS 14, before we can inspect the login Apple event.
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1180, height: 800),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            backing: .buffered, defer: false
+        )
+        window.title = "Mikro MIDI"
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isReleasedWhenClosed = false
+        window.isRestorable = false
+        window.contentMinSize = NSSize(width: 1120, height: 750)
+        window.contentView = NSHostingView(rootView: MikroWindow(model: model)
+            .preferredColorScheme(.dark)
+            .alert("Mikro MIDI", isPresented: Binding(get: { self.model.errorMessage != nil }, set: { if !$0 { self.model.errorMessage = nil } })) {
+                Button("OK", role: .cancel) { self.model.errorMessage = nil }
+            } message: { Text(self.model.errorMessage ?? "") })
+        window.center()
+        editor = window
+        model.appBehavior.attach(window: window)
     }
 }
 
 @main struct MikroApp: App {
     @NSApplicationDelegateAdaptor(MikroAppDelegate.self) var delegate
-    @State private var model = MikroModel()
+    private var model: MikroModel { delegate.model }
 
     var body: some Scene {
-        Window("Mikro MIDI", id: "main") {
-            MikroWindow(model: model)
-                .preferredColorScheme(.dark)
-                .onAppear { delegate.model = model; NSApplication.shared.activate(ignoringOtherApps: true) }
-                .alert("Mikro MIDI", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
-                    Button("OK", role: .cancel) { model.errorMessage = nil }
-                } message: { Text(model.errorMessage ?? "") }
-        }
-        .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 1180, height: 800)
-        .windowResizability(.contentMinSize)
+        // Settings supplies app commands without an automatically presented scene.
+        Settings { EmptyView() }
         .commands {
             CommandGroup(replacing: .newItem) { }
             CommandGroup(after: .newItem) {
                 Button("Import Preset…") { model.importPreset() }.keyboardShortcut("o")
                 Button("Export Preset…") { model.exportPreset() }.keyboardShortcut("s", modifiers: [.command, .shift])
             }
-            CommandGroup(after: .appSettings) {
+            CommandGroup(replacing: .appSettings) {
                 Button("App behavior…") {
                     model.workspace = .setup
                     model.appBehavior.showWindow()
@@ -84,7 +112,6 @@ extension Color {
 }
 
 struct MikroWindow: View {
-    @Environment(\.openWindow) private var openWindow
     @Bindable var model: MikroModel
     @State private var showingReset = false
     @State private var preparedPages: Set<Workspace> = [.pads]
@@ -115,8 +142,6 @@ struct MikroWindow: View {
         .foregroundStyle(Studio.text)
         .font(.system(size: 13))
         .tint(Studio.accent)
-        .background(MikroWindowRegistration(behavior: model.appBehavior))
-        .onAppear { model.appBehavior.openEditor = { openWindow(id: "main") } }
         .onChange(of: model.workspace) { _, workspace in preparedPages.insert(workspace) }
         .task {
             // Build native controls once, after the first frame. Retained pages
@@ -140,29 +165,6 @@ struct MikroWindow: View {
         case .knob: KnobWorkspace(model: model)
         case .touchStrip: TouchStripWorkspace(model: model)
         case .setup: MikroSetupPage(model: model)
-        }
-    }
-}
-
-struct MikroWindowRegistration: NSViewRepresentable {
-    let behavior: MikroAppBehavior
-
-    func makeNSView(context: Context) -> RegistrationView { RegistrationView(behavior: behavior) }
-    func updateNSView(_ nsView: RegistrationView, context: Context) { }
-
-    final class RegistrationView: NSView {
-        let behavior: MikroAppBehavior
-
-        init(behavior: MikroAppBehavior) {
-            self.behavior = behavior
-            super.init(frame: .zero)
-        }
-
-        required init?(coder: NSCoder) { nil }
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            if let window { behavior.attach(window: window) }
         }
     }
 }

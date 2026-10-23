@@ -1,4 +1,4 @@
-.PHONY: app check check-app run
+.PHONY: app check check-app check-launch run
 
 app:
 	./scripts/build-macos.sh
@@ -12,6 +12,11 @@ check-app:
 	mkdir -p target/swift-checks
 	swiftc -parse-as-library macos/MikroAppBehavior.swift scripts/check-app-behavior.swift -o target/swift-checks/app-behavior
 	target/swift-checks/app-behavior
+	swiftc -parse-as-library macos/MikroLoginItem.swift scripts/check-login-item.swift -o target/swift-checks/login-item
+	target/swift-checks/login-item
+
+check-launch: app
+	swift scripts/check-launch.swift "dist/Mikro MIDI.app"
 
 run: app
 	open "dist/Mikro MIDI.app"

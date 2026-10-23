@@ -97,6 +97,7 @@ struct MikroSetupPage: View {
                 }
             }.padding(28)
         }
+        .onAppear { model.loginItem.refresh() }
     }
 
     private var appBehaviorCard: some View {
@@ -127,6 +128,24 @@ struct MikroSetupPage: View {
                     behaviorToggle("Show in menu bar", detail: "Quick access to status and driver controls.", isOn: $behavior.showInMenuBar)
                     behaviorToggle("Show in Dock", detail: "Reopen the window from the Dock or ⌘ Tab.", isOn: $behavior.showInDock)
                 }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                behaviorToggle("Launch at login", detail: "Start quietly, with no window. Uses your automatic driver setting above.", isOn: Binding(
+                    get: { model.loginItem.launchAtLogin },
+                    set: { model.loginItem.setLaunchAtLogin($0) }
+                ))
+                if model.loginItem.requiresApproval {
+                    HStack {
+                        Text("Allow Mikro MIDI in Login Items to finish enabling startup.")
+                            .font(.system(size: 11)).foregroundStyle(Studio.muted)
+                        Spacer()
+                        Button("Open Login Items…") { model.loginItem.openLoginItemsSettings() }
+                            .buttonStyle(.bordered).controlSize(.small)
+                    }
+                }
+                if let error = model.loginItem.errorMessage {
+                    Text(error).font(.system(size: 11)).foregroundStyle(Studio.palette[1])
+                }
             }
             Text("Reopen from the menu bar or Dock. Quit Mikro MIDI to stop the driver.")
                 .font(.system(size: 11)).foregroundStyle(Studio.muted)

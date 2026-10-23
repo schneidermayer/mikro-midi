@@ -18,6 +18,10 @@ Requires **Apple Silicon, macOS 14+, and Maschine Mikro MK3**. Release downloads
 
 Mikro MIDI keeps running when you close its window. Reopen it from the menu bar or Dock; choose **Quit Mikro MIDI** to stop the driver. Your music app supplies the sound.
 
+To start automatically, enable **Setup → App behavior → Launch at login**. It is off by default and opens Mikro MIDI quietly, without showing a window or taking focus. Keep **Start driver when app opens** enabled to connect automatically. If macOS requests approval, use **Open Login Items…** to allow it in System Settings.
+
+While the driver runs, plugging in your Mikro connects it automatically. Unplugging returns to **Waiting for Mikro** and keeps the MIDI port available, so your DAW retains its routing. **Stop driver** stays stopped until you choose **Start driver**; reopening the controls does not restart it. **Quit** stops the app and driver until you open the app again or the next enabled login launch.
+
 ## Controls
 
 - **Pads:** velocity-sensitive notes, optional aftertouch, eight color palettes, and adjustable LED brightness. ⌘-click or ⇧-click to color or transpose several pads together.
@@ -79,6 +83,8 @@ open "dist/Mikro MIDI.app"
 ```
 
 The build creates an ad-hoc signed app, ZIP, and checksum in `dist/`. For a notarized release, set `SIGNING_IDENTITY` and `NOTARY_PROFILE` to your Developer ID certificate and saved notarytool profile.
+
+`make check-launch` checks quiet login startup, reopening, and quitting in a temporary preview app. With Accessibility access, it also checks Dock/menu bar visibility and closing the window. It does not register a login item or start the MIDI driver.
 
 The Rust bridge also runs independently: `cargo run --release -- --help`. Linux dependencies and USB permissions are covered in the [upstream guide](https://github.com/r00tman/maschine-mikro-mk3-driver#readme). Packaged releases are for macOS; hardware testing was performed on macOS 27.0.1.
 

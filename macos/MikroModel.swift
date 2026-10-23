@@ -158,6 +158,7 @@ struct ActivityItem: Identifiable {
     var hasProcess = false
     let preview: Bool
     var appBehavior: MikroAppBehavior
+    let loginItem: MikroLoginItem
     let configURL: URL
     @ObservationIgnored private var process: Process?
     @ObservationIgnored private var inputPipe: Pipe?
@@ -175,6 +176,7 @@ struct ActivityItem: Identifiable {
     init() {
         preview = CommandLine.arguments.contains("--preview")
         appBehavior = MikroAppBehavior(preview: preview)
+        loginItem = MikroLoginItem(preview: preview)
         autoStart = preview ? true : UserDefaults.standard.object(forKey: "autoStart") as? Bool ?? true
         configURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Mikro MIDI/settings.json")
