@@ -14,6 +14,8 @@ check-app:
 	target/swift-checks/app-behavior
 	swiftc -parse-as-library macos/MikroLoginItem.swift scripts/check-login-item.swift -o target/swift-checks/login-item
 	target/swift-checks/login-item
+	swiftc -parse-as-library macos/MikroAppBehavior.swift macos/MikroLoginItem.swift macos/MikroModel.swift scripts/check-background.swift -o target/swift-checks/background
+	target/swift-checks/background
 
 check-launch: app
 	swift scripts/check-launch.swift "dist/Mikro MIDI.app"

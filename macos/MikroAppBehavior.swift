@@ -1,7 +1,8 @@
 import AppKit
 import Observation
 
-@Observable @MainActor final class MikroAppBehavior {
+@Observable @MainActor final class MikroAppBehavior: NSObject, NSWindowDelegate {
+    private(set) var editorVisible = false
     var runInBackground: Bool {
         didSet {
             save(runInBackground, forKey: "runInBackground")
@@ -28,6 +29,7 @@ import Observation
     @ObservationIgnored private var isPrepared = false
     @ObservationIgnored private weak var mainWindow: NSWindow?
     @ObservationIgnored var openEditor: (() -> Void)?
+    @ObservationIgnored var editorVisibilityChanged: ((Bool) -> Void)?
 
     init(preview: Bool, defaults: UserDefaults = .standard) {
         self.preview = preview
@@ -37,11 +39,30 @@ import Observation
         showInMenuBar = savedMenuBar
         let savedDock = preview ? true : defaults.object(forKey: "showInDock") as? Bool ?? true
         showInDock = savedDock || !savedMenuBar
+        super.init()
     }
 
     func attach(window: NSWindow) {
         mainWindow = window
+        window.delegate = self
         prepareForLaunch()
+        refreshEditorVisibility()
+    }
+
+    func windowDidChangeOcclusionState(_ notification: Notification) { refreshEditorVisibility() }
+    func windowDidMiniaturize(_ notification: Notification) { refreshEditorVisibility() }
+    func windowDidDeminiaturize(_ notification: Notification) { refreshEditorVisibility() }
+    func windowWillClose(_ notification: Notification) { setEditorVisible(false) }
+
+    private func refreshEditorVisibility() {
+        guard let window = mainWindow else { setEditorVisible(false); return }
+        setEditorVisible(window.isVisible && !window.isMiniaturized && window.occlusionState.contains(.visible))
+    }
+
+    private func setEditorVisible(_ visible: Bool) {
+        guard editorVisible != visible else { return }
+        editorVisible = visible
+        editorVisibilityChanged?(visible)
     }
 
     func prepareForLaunch() {
@@ -58,6 +79,7 @@ import Observation
             if self.mainWindow?.isMiniaturized == true { self.mainWindow?.deminiaturize(nil) }
             NSApplication.shared.activate(ignoringOtherApps: true)
             self.mainWindow?.makeKeyAndOrderFront(nil)
+            self.refreshEditorVisibility()
         }
     }
 

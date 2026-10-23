@@ -90,10 +90,14 @@ impl Lights {
         (color, b)
     }
 
-    pub fn write(&self, h: &HidDevice) -> HidResult<()> {
+    pub fn report(&self) -> [u8; 81] {
         let mut report = [0x80; 81];
         report[1..].copy_from_slice(&self.status);
-        h.write(&report)?;
+        report
+    }
+
+    pub fn write(&self, h: &HidDevice) -> HidResult<()> {
+        h.write(&self.report())?;
         Ok(())
     }
 }

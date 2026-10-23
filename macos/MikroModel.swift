@@ -142,7 +142,6 @@ struct ActivityItem: Identifiable {
     var state = "stopped"
     var statusMessage = "Ready when you are"
     var activePads = Set<Int>()
-    var glowingPads = Set<Int>()
     var activeButtons = Set<Int>()
     var velocities: [Int: Int] = [:]
     var activity: [ActivityItem] = []
@@ -168,13 +167,13 @@ struct ActivityItem: Identifiable {
     @ObservationIgnored private var saveWork: DispatchWorkItem?
     @ObservationIgnored private var loading = true
     @ObservationIgnored private var selectionAnchor = 12
-    @ObservationIgnored private var glowTokens: [Int: UUID] = [:]
+    @ObservationIgnored private var awaitingInputSnapshot = false
     @ObservationIgnored private var assignmentResetSnapshot: MikroSettings?
 
     static let buttonNames = ["Project", "Star", "Browse", "Volume", "Swing", "Tempo", "Plug-in", "Sampling", "Left", "Right", "Pitch", "Mod", "Perform", "Notes", "Group", "Auto", "Lock", "Note Repeat", "Restart", "Erase", "Tap", "Follow", "Play", "Record", "Stop", "Shift", "Fixed Velocity", "Pad Mode", "Keyboard", "Chords", "Step", "Scene", "Pattern", "Events", "Variation", "Duplicate", "Select", "Solo", "Mute", "Encoder Press", "Encoder Touch"]
 
-    init() {
-        preview = CommandLine.arguments.contains("--preview")
+    init(preview: Bool = CommandLine.arguments.contains("--preview")) {
+        self.preview = preview
         appBehavior = MikroAppBehavior(preview: preview)
         loginItem = MikroLoginItem(preview: preview)
         autoStart = preview ? true : UserDefaults.standard.object(forKey: "autoStart") as? Bool ?? true
@@ -186,6 +185,9 @@ struct ActivityItem: Identifiable {
         }
         encoderValue = settings.encoder_initial
         loading = false
+        appBehavior.editorVisibilityChanged = { [weak self] visible in
+            self?.observeInput(visible)
+        }
         persist()
         if preview {
             statusMessage = "Preview · hardware is not connected"
@@ -274,7 +276,9 @@ struct ActivityItem: Identifiable {
         let child = Process()
         let input = Pipe(), output = Pipe(), errors = Pipe()
         child.executableURL = backendURL
-        child.arguments = ["--json", "--wait", "--config", configURL.path]
+        // Start quietly even if opening the editor races with driver startup.
+        // The observe command supplies the current visibility and a fresh snapshot.
+        child.arguments = ["--json", "--wait", "--quiet-events", "--config", configURL.path]
         child.standardInput = input
         child.standardOutput = output
         child.standardError = errors
@@ -298,8 +302,7 @@ struct ActivityItem: Identifiable {
                 self.process = nil
                 self.hasProcess = false
                 self.inputPipe = nil
-                self.activePads.removeAll()
-                self.activeButtons.removeAll()
+                self.clearInputFeedback()
                 self.state = "stopped"
                 self.statusMessage = child.terminationStatus == 0 ? "Driver stopped" : "Driver stopped. Open Setup for help."
                 if child.terminationStatus != 0 { self.log("Driver exited with code \(child.terminationStatus)") }
@@ -319,6 +322,7 @@ struct ActivityItem: Identifiable {
             state = "connecting"
             statusMessage = "Looking for Maschine Mikro MK3…"
             log("MIDI driver started")
+            if appBehavior.editorVisible { observeInput(true) }
         } catch {
             errorMessage = "Could not start the driver: \(error.localizedDescription)"
         }
@@ -352,10 +356,24 @@ struct ActivityItem: Identifiable {
 
     func panic() {
         send("panic")
-        activePads.removeAll()
-        glowingPads.removeAll()
-        activeButtons.removeAll()
+        clearInputFeedback()
         log("All notes off sent")
+    }
+
+    private func observeInput(_ enabled: Bool) {
+        awaitingInputSnapshot = enabled
+        clearInputFeedback()
+        send("observe", enabled: enabled)
+    }
+
+    private func clearInputFeedback() {
+        activePads.removeAll()
+        activeButtons.removeAll()
+        velocities.removeAll()
+        encoderHasActivity = false
+        encoderLastDelta = 0
+        encoderRotation = 0
+        stripTouched = false
     }
 
     private func scheduleSave() {
@@ -381,17 +399,18 @@ struct ActivityItem: Identifiable {
     private struct DriverCommand: Encodable {
         let command: String
         let settings: MikroSettings?
+        let enabled: Bool?
     }
 
-    private func send(_ command: String, settings: MikroSettings? = nil) {
+    private func send(_ command: String, settings: MikroSettings? = nil, enabled: Bool? = nil) {
         guard let handle = inputPipe?.fileHandleForWriting, process?.isRunning == true,
-              var data = try? JSONEncoder().encode(DriverCommand(command: command, settings: settings)) else { return }
+              var data = try? JSONEncoder().encode(DriverCommand(command: command, settings: settings, enabled: enabled)) else { return }
         data.append(10)
         do { try handle.write(contentsOf: data) }
         catch { log("Could not update driver: \(error.localizedDescription)") }
     }
 
-    private func consumeOutput(_ text: String) {
+    func consumeOutput(_ text: String) {
         outputBuffer += text
         while let newline = outputBuffer.firstIndex(of: "\n") {
             let line = String(outputBuffer[..<newline])
@@ -405,25 +424,41 @@ struct ActivityItem: Identifiable {
 
     private func receive(_ event: [String: Any]) {
         let type = event["type"] as? String ?? ""
+        // Events already queued when the editor was hidden must not rebuild UI
+        // state or logs. On reopening, wait for the driver's authoritative state.
+        if ["pad", "button", "encoder", "strip"].contains(type) {
+            guard appBehavior.editorVisible && !awaitingInputSnapshot else { return }
+        }
         switch type {
         case "status":
             state = event["state"] as? String ?? state
             statusMessage = event["message"] as? String ?? stateTitle
-            if !connected { activePads.removeAll(); glowingPads.removeAll(); activeButtons.removeAll(); stripTouched = false }
+            if !connected {
+                clearInputFeedback()
+                awaitingInputSnapshot = appBehavior.editorVisible
+            }
             log(statusMessage)
+        case "snapshot":
+            guard appBehavior.editorVisible,
+                  let heldPads = event["held_pads"] as? [Bool], heldPads.count == 16,
+                  let heldButtons = event["held_buttons"] as? [Bool], heldButtons.count == 41,
+                  let currentEncoder = event["encoder_value"] as? Int, (0...127).contains(currentEncoder),
+                  let currentStrip = event["strip_value"] as? Int, (0...127).contains(currentStrip),
+                  let touched = event["strip_touched"] as? Bool else { return }
+            clearInputFeedback()
+            activePads = Set(heldPads.indices.filter { heldPads[$0] }.map(Self.physicalPad))
+            activeButtons = Set(heldButtons.indices.filter { heldButtons[$0] })
+            encoderValue = currentEncoder
+            encoderHasActivity = settings.encoder_mode == "absolute"
+            stripValue = currentStrip
+            stripTouched = touched
+            awaitingInputSnapshot = false
         case "pad":
             guard let pad = event["pad"] as? Int, (1...16).contains(pad) else { return }
             let pressed = event["pressed"] as? Bool ?? false
             let velocity = event["velocity"] as? Int ?? 0
             if pressed {
                 activePads.insert(pad); velocities[pad] = velocity
-                let token = UUID()
-                glowTokens[pad] = token
-                glowingPads.insert(pad)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { [weak self] in
-                    guard let self, self.glowTokens[pad] == token else { return }
-                    self.glowingPads.remove(pad)
-                }
             }
             else { activePads.remove(pad) }
             if pressed { log("Pad \(pad)  ·  \(Self.noteName(event["note"] as? Int ?? settings.notemaps[Self.gridIndex(pad)]))  ·  velocity \(velocity)") }

@@ -142,16 +142,8 @@ struct MikroWindow: View {
         .foregroundStyle(Studio.text)
         .font(.system(size: 13))
         .tint(Studio.accent)
-        .onChange(of: model.workspace) { _, workspace in preparedPages.insert(workspace) }
-        .task {
-            // Build native controls once, after the first frame. Retained pages
-            // preserve scroll positions and avoid rebuilding forms on tab changes.
-            for workspace in Workspace.allCases where workspace != .pads {
-                try? await Task.sleep(for: .milliseconds(150))
-                if Task.isCancelled { return }
-                preparedPages.insert(workspace)
-            }
-        }
+        // Retain visited pages for quick tab changes without warming unused pages.
+        .onChange(of: model.workspace, initial: true) { _, workspace in preparedPages.insert(workspace) }
         .confirmationDialog("Restore default mappings and pad colors?", isPresented: $showingReset) {
             Button("Restore Defaults", role: .destructive) { model.reset() }
             Button("Cancel", role: .cancel) { }

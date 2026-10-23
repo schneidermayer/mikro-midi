@@ -1,17 +1,19 @@
-use hidapi::{HidDevice, HidResult};
+use crate::DriverResult;
 use maschine_library::font::Font;
 use maschine_library::lights::{Brightness, Lights, PadColors};
 use maschine_library::screen::Screen;
 use std::{thread, time};
 
 pub(crate) fn self_test(
-    device: &HidDevice,
+    write: impl Fn(&[u8]) -> DriverResult<()>,
     screen: &mut Screen,
     lights: &mut Lights,
-) -> HidResult<()> {
+) -> DriverResult<()> {
     for (position, digit) in [1, 3, 3, 7].into_iter().enumerate() {
         Font::write_digit(screen, 0, position * 32, digit, 4);
-        screen.write(device)?;
+        for report in screen.reports() {
+            write(&report)?;
+        }
         if position < 3 {
             thread::sleep(time::Duration::from_millis(100));
         }
@@ -22,7 +24,7 @@ pub(crate) fn self_test(
         let button = num::FromPrimitive::from_u32(i).unwrap();
         for brightness in brightnesses {
             lights.set_button(button, brightness);
-            lights.write(device)?;
+            write(&lights.report())?;
         }
     }
     for i in 0..16 {
@@ -32,20 +34,22 @@ pub(crate) fn self_test(
             )
             .unwrap();
             lights.set_pad(i, color, brightness);
-            lights.write(device)?;
+            write(&lights.report())?;
         }
     }
     for i in 0..25 {
         for brightness in brightnesses {
             lights.set_slider(i, brightness);
-            lights.write(device)?;
+            write(&lights.report())?;
         }
     }
     lights.reset();
-    lights.write(device)?;
+    write(&lights.report())?;
 
     screen.reset();
-    screen.write(device)?;
+    for report in screen.reports() {
+        write(&report)?;
+    }
 
     Ok(())
 }

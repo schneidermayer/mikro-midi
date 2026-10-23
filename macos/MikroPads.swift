@@ -38,7 +38,7 @@ struct MikroPadsPage: View {
         let tint = Studio.palette[model.settings.pad_colors[index]]
         let selected = model.selectedPads.contains(index)
         let pressed = model.activePads.contains(number)
-        let glowing = model.glowEnabled && (pressed || model.glowingPads.contains(number))
+        let glowing = model.glowEnabled && pressed
         return Button { model.selectPad(index, modifiers: NSEvent.modifierFlags) } label: {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {

@@ -22,6 +22,8 @@ To start automatically, enable **Setup → App behavior → Launch at login**. I
 
 While the driver runs, plugging in your Mikro connects it automatically. Unplugging returns to **Waiting for Mikro** and keeps the MIDI port available, so your DAW retains its routing. **Stop driver** stays stopped until you choose **Start driver**; reopening the controls does not restart it. **Quit** stops the app and driver until you open the app again or the next enabled login launch.
 
+On macOS, the driver waits for USB events and commands without periodic device polling. When the controls are closed, minimized, or fully covered, live input messages and activity logging pause; MIDI and controller LEDs keep working. Opening the controls refreshes the current held pads, buttons, knob, and strip state.
+
 ## Controls
 
 - **Pads:** velocity-sensitive notes, optional aftertouch, eight color palettes, and adjustable LED brightness. ⌘-click or ⇧-click to color or transpose several pads together.
@@ -65,6 +67,7 @@ Use MIDI Learn to assign controls. Play, Record, and Stop send CC 42, 43, and 44
 ## Troubleshooting
 
 - **Waiting for controller:** check the USB cable and close other controller software. Reconnection is automatic.
+- **USB access or input error:** close other controller software, then reconnect USB or stop and start the driver to retry.
 - **No sound:** enable the MIDI input, load an instrument, and arm or monitor its track.
 - **Stuck notes:** use **Setup → All notes off (Panic)**.
 

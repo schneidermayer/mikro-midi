@@ -40,9 +40,19 @@ impl Screen {
         }
     }
 
+    pub fn reports(&self) -> [[u8; 265]; 2] {
+        let mut reports = [[0; 265]; 2];
+        reports[0][..9].copy_from_slice(&HEADER_HI);
+        reports[0][9..].copy_from_slice(&self.buffer[..256]);
+        reports[1][..9].copy_from_slice(&HEADER_LO);
+        reports[1][9..].copy_from_slice(&self.buffer[256..]);
+        reports
+    }
+
     pub fn write(&self, h: &HidDevice) -> HidResult<()> {
-        h.write(&[&HEADER_HI, &self.buffer[..256]].concat())?;
-        h.write(&[&HEADER_LO, &self.buffer[256..]].concat())?;
+        for report in self.reports() {
+            h.write(&report)?;
+        }
         Ok(())
     }
 }
