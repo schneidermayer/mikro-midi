@@ -26,11 +26,21 @@ Keep the helper open while playing. Your music app supplies the sound.
 - **Touch strip:** CC or 14-bit pitch bend.
 - **Presets:** import/export JSON from the sidebar. Settings save automatically. **Setup → Reset MIDI assignments** preserves colors and supports Undo.
 
-| Buttons | Knob |
-| --- | --- |
-| ![Button CC mappings](docs/images/mikro-midi-buttons.png) | ![Knob modes, range, step size, and direction](docs/images/mikro-midi-knob.png) |
-| **Touch strip** | **Setup** |
-| ![Touch strip mapping and live position](docs/images/mikro-midi-strip.png) | ![Brightness, reset, MIDI channel, and activity](docs/images/mikro-midi-setup.png) |
+### Buttons
+
+![Button CC mappings](docs/images/mikro-midi-buttons.png)
+
+### Knob
+
+![Knob modes, range, step size, and direction](docs/images/mikro-midi-knob.png)
+
+### Touch strip
+
+![Touch strip mapping and live position](docs/images/mikro-midi-strip.png)
+
+### Setup
+
+![Brightness, reset, MIDI channel, and activity](docs/images/mikro-midi-setup.png)
 
 ## MIDI defaults
 
