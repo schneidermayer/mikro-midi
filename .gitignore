@@ -1,3 +1,8 @@
 /target
+/dist
+/macos/AppIcon.iconset/
 .idea/
 *.swp
+.DS_Store
+*.xcuserstate
+*.dSYM/

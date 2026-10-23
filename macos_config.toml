@@ -1,0 +1,5 @@
+# HID pad order runs across the top row first. Physical pads 1–16
+# (numbered from the bottom left) send consecutive MIDI notes 36–51.
+notemaps = [48, 49, 50, 51, 44, 45, 46, 47, 40, 41, 42, 43, 36, 37, 38, 39]
+client_name = "Mikro MIDI"
+port_name = "Mikro MIDI"

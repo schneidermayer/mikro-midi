@@ -3,9 +3,9 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
-authors = ["Viktor Rudnev <me@vrudnev.xyz>"]
+authors = ["Viktor Rudnev <me@vrudnev.xyz>", "Hannes Schneidermayer"]
 
 [workspace.dependencies]
 maschine_library = { path = "crates/maschine_library" }
